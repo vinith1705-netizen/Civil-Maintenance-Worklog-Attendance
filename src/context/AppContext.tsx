@@ -22,6 +22,8 @@ import {
   getTodayDateString,
 } from '../data/seedData';
 import { initAuth, googleSignIn, googleSignOut, getAccessToken } from '../services/auth';
+import { db } from '../services/firebase';
+import { doc, setDoc, deleteDoc, writeBatch, collection, getDocs } from 'firebase/firestore';
 import {
   fetchSpreadsheetInfo,
   fetchSheetValues,
@@ -195,7 +197,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [attendance, setAttendance] = useState<AttendanceRecord[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.ATTENDANCE);
-      return saved ? JSON.parse(saved) : INITIAL_ATTENDANCE;
+      if (saved) {
+        const parsed: AttendanceRecord[] = JSON.parse(saved);
+        return parsed.map((a) => ({
+          ...a,
+          workDetailsFN: a.workDetailsFN?.includes('Parapet wall brick plastering') ? '' : a.workDetailsFN,
+          workDetailsAN: a.workDetailsAN?.includes('Parapet wall brick plastering') || a.workDetailsAN?.includes('Second floor corridor tile joints') ? '' : a.workDetailsAN,
+        }));
+      }
+      return INITIAL_ATTENDANCE;
     } catch {
       return INITIAL_ATTENDANCE;
     }
@@ -204,7 +214,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [worklogs, setWorklogs] = useState<WorklogRecord[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.WORKLOGS);
-      return saved ? JSON.parse(saved) : INITIAL_WORKLOGS;
+      if (saved) {
+        const parsed: WorklogRecord[] = JSON.parse(saved);
+        return parsed.map((w) => ({
+          ...w,
+          workDetails: w.workDetails?.includes('Parapet wall brick plastering') ? '' : w.workDetails,
+        }));
+      }
+      return INITIAL_WORKLOGS;
     } catch {
       return INITIAL_WORKLOGS;
     }
@@ -300,6 +317,40 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     );
     return () => unsubscribe();
   }, []);
+
+  // Load from Firestore when user signs in
+  useEffect(() => {
+    if (!currentUser) return;
+    const loadFromFirestore = async () => {
+      try {
+        const [attSnap, wlSnap] = await Promise.all([
+          getDocs(collection(db, 'attendance')),
+          getDocs(collection(db, 'worklogs')),
+        ]);
+        if (!attSnap.empty) {
+          const cloudAtt: AttendanceRecord[] = [];
+          attSnap.forEach((d) => cloudAtt.push(d.data() as AttendanceRecord));
+          setAttendance((prev) => {
+            const map = new Map(prev.map((a) => [a.id, a]));
+            cloudAtt.forEach((a) => map.set(a.id, a));
+            return Array.from(map.values());
+          });
+        }
+        if (!wlSnap.empty) {
+          const cloudWl: WorklogRecord[] = [];
+          wlSnap.forEach((d) => cloudWl.push(d.data() as WorklogRecord));
+          setWorklogs((prev) => {
+            const map = new Map(prev.map((w) => [w.id, w]));
+            cloudWl.forEach((w) => map.set(w.id, w));
+            return Array.from(map.values());
+          });
+        }
+      } catch (err) {
+        console.warn('Load from Firestore note:', err);
+      }
+    };
+    loadFromFirestore();
+  }, [currentUser]);
 
   const showToast = (type: ToastNotification['type'], message: string, title?: string) => {
     const id = Math.random().toString(36).substring(2, 9);
@@ -476,6 +527,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
     }
 
+    // Sync to Firestore if authenticated
+    if (currentUser) {
+      setDoc(doc(db, 'attendance', finalRecord.id), finalRecord).catch((e) =>
+        console.warn('Firestore attendance save warning:', e)
+      );
+      setDoc(doc(db, 'worklogs', worklogEntry.id), worklogEntry).catch((e) =>
+        console.warn('Firestore worklog save warning:', e)
+      );
+    }
+
     showToast(
       'success',
       isEdit
@@ -488,6 +549,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const deleteAttendanceRecord = (id: string) => {
     setAttendance((prev) => prev.filter((a) => a.id !== id));
+    if (currentUser) {
+      deleteDoc(doc(db, 'attendance', id)).catch((e) =>
+        console.warn('Firestore attendance delete warning:', e)
+      );
+    }
     showToast('info', 'Attendance record removed.');
   };
 
@@ -601,6 +667,22 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
     }
 
+    // Sync batch to Firestore
+    if (currentUser && updatedRecords.length > 0) {
+      try {
+        const batch = writeBatch(db);
+        updatedRecords.forEach((r) => {
+          batch.set(doc(db, 'attendance', r.id), r);
+        });
+        generatedWorklogs.forEach((w) => {
+          batch.set(doc(db, 'worklogs', w.id), w);
+        });
+        batch.commit().catch((e) => console.warn('Firestore batch save warning:', e));
+      } catch (e) {
+        console.warn('Firestore batch setup warning:', e);
+      }
+    }
+
     showToast('success', `Daily roll-call recorded for all ${updatedRecords.length} labours.`);
     return { success: true, count: updatedRecords.length };
   };
@@ -656,12 +738,24 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
     }
 
+    // Sync to Firestore
+    if (currentUser) {
+      setDoc(doc(db, 'worklogs', finalRecord.id), finalRecord).catch((e) =>
+        console.warn('Firestore worklog save warning:', e)
+      );
+    }
+
     showToast('success', isEdit ? 'Worklog updated' : 'New worklog entry saved');
     return { success: true, record: finalRecord, sheetSynced };
   };
 
   const deleteWorklogRecord = (id: string) => {
     setWorklogs((prev) => prev.filter((w) => w.id !== id));
+    if (currentUser) {
+      deleteDoc(doc(db, 'worklogs', id)).catch((e) =>
+        console.warn('Firestore worklog delete warning:', e)
+      );
+    }
     showToast('info', 'Worklog entry removed.');
   };
 

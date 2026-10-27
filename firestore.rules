@@ -1,0 +1,154 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny all unknown paths
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'vinith1705@gmail.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    // Test connection doc
+    match /test/{docId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    // Worker Master
+    function isValidWorker(data) {
+      return data.keys().hasAll(['id', 'staffId', 'name', 'designation', 'perDayWage', 'status'])
+        && data.id is string && data.id.size() <= 128
+        && data.staffId is string && data.staffId.size() <= 64
+        && data.name is string && data.name.size() <= 128
+        && data.designation is string && data.designation.size() <= 64
+        && data.perDayWage is number && data.perDayWage >= 0
+        && data.status in ['Active', 'Inactive'];
+    }
+
+    match /workers/{workerId} {
+      allow get, list: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(workerId) && isValidWorker(incoming());
+      allow update: if isSignedIn() && isValidId(workerId) && isValidWorker(incoming());
+      allow delete: if isSignedIn() && isValidId(workerId);
+    }
+
+    // Attendance Records
+    function isValidAttendance(data) {
+      return data.keys().hasAll(['id', 'date', 'staffId', 'workerName', 'attendanceFN', 'attendanceAN', 'wage'])
+        && data.id is string && data.id.size() <= 128
+        && data.date is string && data.date.size() <= 32
+        && data.staffId is string && data.staffId.size() <= 64
+        && data.workerName is string && data.workerName.size() <= 128
+        && data.attendanceFN in ['Present', 'Absent', 'Leave', 'Permission', 'Holiday', 'Unmarked']
+        && data.attendanceAN in ['Present', 'Absent', 'Leave', 'Permission', 'Holiday', 'Unmarked']
+        && data.wage is number;
+    }
+
+    match /attendance/{attendanceId} {
+      allow get, list: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(attendanceId) && isValidAttendance(incoming());
+      allow update: if isSignedIn() && isValidId(attendanceId) && isValidAttendance(incoming());
+      allow delete: if isSignedIn() && isValidId(attendanceId);
+    }
+
+    // Worklog Entries
+    function isValidWorklog(data) {
+      return data.keys().hasAll(['id', 'date', 'staffId', 'workerName', 'session', 'status'])
+        && data.id is string && data.id.size() <= 128
+        && data.date is string && data.date.size() <= 32
+        && data.staffId is string && data.staffId.size() <= 64
+        && data.workerName is string && data.workerName.size() <= 128
+        && data.session in ['Forenoon', 'Afternoon', 'Full Day']
+        && data.status in ['Completed', 'In Progress', 'Pending'];
+    }
+
+    match /worklogs/{worklogId} {
+      allow get, list: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(worklogId) && isValidWorklog(incoming());
+      allow update: if isSignedIn() && isValidId(worklogId) && isValidWorklog(incoming());
+      allow delete: if isSignedIn() && isValidId(worklogId);
+    }
+
+    // Locations Master
+    function isValidLocation(data) {
+      return data.keys().hasAll(['id', 'name', 'category', 'status'])
+        && data.id is string && data.id.size() <= 128
+        && data.name is string && data.name.size() <= 128
+        && data.status in ['Active', 'Inactive'];
+    }
+
+    match /locations/{locationId} {
+      allow get, list: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(locationId) && isValidLocation(incoming());
+      allow update: if isSignedIn() && isValidId(locationId) && isValidLocation(incoming());
+      allow delete: if isSignedIn() && isValidId(locationId);
+    }
+
+    // Categories Master
+    function isValidCategory(data) {
+      return data.keys().hasAll(['id', 'name', 'color'])
+        && data.id is string && data.id.size() <= 128
+        && data.name is string && data.name.size() <= 128
+        && data.color is string && data.color.size() <= 32;
+    }
+
+    match /categories/{categoryId} {
+      allow get, list: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(categoryId) && isValidCategory(incoming());
+      allow update: if isSignedIn() && isValidId(categoryId) && isValidCategory(incoming());
+      allow delete: if isSignedIn() && isValidId(categoryId);
+    }
+
+    // Complaints / Maintenance Tickets
+    function isValidComplaint(data) {
+      return data.keys().hasAll(['id', 'category', 'location', 'description', 'status', 'priority', 'reportedDate'])
+        && data.id is string && data.id.size() <= 128
+        && data.description is string && data.description.size() <= 1000
+        && data.status in ['Pending', 'In Progress', 'Resolved']
+        && data.priority in ['High', 'Medium', 'Low'];
+    }
+
+    match /complaints/{complaintId} {
+      allow get, list: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(complaintId) && isValidComplaint(incoming());
+      allow update: if isSignedIn() && isValidId(complaintId) && isValidComplaint(incoming());
+      allow delete: if isSignedIn() && isValidId(complaintId);
+    }
+
+    // System Settings
+    function isValidSettings(data) {
+      return data.keys().hasAll(['id', 'institutionName', 'departmentName'])
+        && data.id is string && data.id.size() <= 128;
+    }
+
+    match /settings/{settingsId} {
+      allow get, list: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(settingsId) && isValidSettings(incoming());
+      allow update: if isSignedIn() && isValidId(settingsId) && isValidSettings(incoming());
+      allow delete: if isSignedIn() && isValidId(settingsId);
+    }
+  }
+}

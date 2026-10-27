@@ -108,13 +108,16 @@ export const AttendanceEntryView: React.FC = () => {
         let anDetails = existing.workDetailsAN || '';
         if (
           fnDetails.toLowerCase().includes('general civil maintenance') ||
-          fnDetails === 'Daily civil maintenance work'
+          fnDetails === 'Daily civil maintenance work' ||
+          fnDetails.toLowerCase().includes('parapet wall')
         ) {
           fnDetails = '';
         }
         if (
           anDetails.toLowerCase().includes('general civil maintenance') ||
-          anDetails === 'Daily civil maintenance work'
+          anDetails === 'Daily civil maintenance work' ||
+          anDetails.toLowerCase().includes('parapet wall') ||
+          anDetails.toLowerCase().includes('second floor corridor tile')
         ) {
           anDetails = '';
         }

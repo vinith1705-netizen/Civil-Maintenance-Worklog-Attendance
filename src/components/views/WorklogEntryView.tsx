@@ -92,7 +92,8 @@ export const WorklogEntryView: React.FC = () => {
         fn.toLowerCase().includes('general civil maintenance') ||
         fn === 'Daily civil maintenance work' ||
         fn === 'General civil maintenance' ||
-        fn === 'General civil maintenance FN'
+        fn === 'General civil maintenance FN' ||
+        fn.toLowerCase().includes('parapet wall')
       ) {
         fn = '';
       }
@@ -100,7 +101,9 @@ export const WorklogEntryView: React.FC = () => {
         an.toLowerCase().includes('general civil maintenance') ||
         an === 'Daily civil maintenance work' ||
         an === 'General civil maintenance' ||
-        an === 'General civil maintenance AN'
+        an === 'General civil maintenance AN' ||
+        an.toLowerCase().includes('parapet wall') ||
+        an.toLowerCase().includes('second floor corridor tile')
       ) {
         an = '';
       }

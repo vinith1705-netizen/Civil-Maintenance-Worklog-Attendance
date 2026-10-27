@@ -43,14 +43,6 @@ export const Header: React.FC<{ onToggleMobileMenu?: () => void }> = ({ onToggle
               BIT
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] font-extrabold tracking-wider text-amber-700 uppercase bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-                  {settings.institutionName}
-                </span>
-                <span className="hidden sm:inline-block text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-                  • {settings.departmentName}
-                </span>
-              </div>
               <h1 className="text-sm md:text-base font-bold text-slate-900 tracking-tight leading-tight flex items-center gap-1.5">
                 <span>Civil Maintenance Worklog & Attendance</span>
                 <span className="hidden md:inline-flex items-center gap-1 text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono font-medium">

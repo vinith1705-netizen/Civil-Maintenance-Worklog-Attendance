@@ -1,0 +1,166 @@
+{
+  "entities": {
+    "Worker": {
+      "title": "Worker",
+      "description": "Civil maintenance worker / labour profile",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "staffId": { "type": "string", "maxLength": 64 },
+        "eId": { "type": "string", "maxLength": 64 },
+        "name": { "type": "string", "maxLength": 128 },
+        "designation": { "type": "string", "maxLength": 64 },
+        "category": { "type": "string", "maxLength": 64 },
+        "perDayWage": { "type": "number" },
+        "status": { "type": "string", "enum": ["Active", "Inactive"] },
+        "joiningDate": { "type": "string", "maxLength": 32 },
+        "remarks": { "type": "string", "maxLength": 500 }
+      },
+      "required": ["id", "staffId", "name", "designation", "perDayWage", "status"]
+    },
+    "Attendance": {
+      "title": "Attendance",
+      "description": "Daily attendance record for a worker",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "date": { "type": "string", "maxLength": 32 },
+        "staffId": { "type": "string", "maxLength": 64 },
+        "eId": { "type": "string", "maxLength": 64 },
+        "workerName": { "type": "string", "maxLength": 128 },
+        "designation": { "type": "string", "maxLength": 64 },
+        "workPlaceFN": { "type": "string", "maxLength": 128 },
+        "workDetailsFN": { "type": "string", "maxLength": 1000 },
+        "attendanceFN": { "type": "string", "enum": ["Present", "Absent", "Leave", "Permission", "Holiday"] },
+        "workPlaceAN": { "type": "string", "maxLength": 128 },
+        "workDetailsAN": { "type": "string", "maxLength": 1000 },
+        "attendanceAN": { "type": "string", "enum": ["Present", "Absent", "Leave", "Permission", "Holiday"] },
+        "workCategory": { "type": "string", "maxLength": 64 },
+        "calculatedWage": { "type": "number" },
+        "wageOverride": { "type": "number" },
+        "wage": { "type": "number" },
+        "status": { "type": "string", "enum": ["Approved", "Draft", "Flagged"] },
+        "remarks": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "string", "maxLength": 64 },
+        "syncedToSheet": { "type": "boolean" }
+      },
+      "required": ["id", "date", "staffId", "workerName", "attendanceFN", "attendanceAN", "wage"]
+    },
+    "Worklog": {
+      "title": "Worklog",
+      "description": "Civil maintenance worklog record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "date": { "type": "string", "maxLength": 32 },
+        "staffId": { "type": "string", "maxLength": 64 },
+        "workerName": { "type": "string", "maxLength": 128 },
+        "designation": { "type": "string", "maxLength": 64 },
+        "workCategory": { "type": "string", "maxLength": 64 },
+        "workLocation": { "type": "string", "maxLength": 128 },
+        "workDetails": { "type": "string", "maxLength": 2000 },
+        "session": { "type": "string", "enum": ["Forenoon", "Afternoon", "Full Day"] },
+        "status": { "type": "string", "enum": ["Completed", "In Progress", "Pending"] },
+        "remarks": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string", "maxLength": 64 },
+        "syncedToSheet": { "type": "boolean" }
+      },
+      "required": ["id", "date", "staffId", "workerName", "session", "status"]
+    },
+    "Location": {
+      "title": "Location",
+      "description": "Campus block or facility location",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 128 },
+        "category": { "type": "string", "maxLength": 64 },
+        "inCharge": { "type": "string", "maxLength": 128 },
+        "status": { "type": "string", "enum": ["Active", "Inactive"] }
+      },
+      "required": ["id", "name", "category", "status"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Civil work category and complaint counters",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 128 },
+        "color": { "type": "string", "maxLength": 32 },
+        "description": { "type": "string", "maxLength": 500 },
+        "complaintCount": { "type": "number" },
+        "pendingComplaints": { "type": "number" },
+        "resolvedComplaints": { "type": "number" }
+      },
+      "required": ["id", "name", "color"]
+    },
+    "Complaint": {
+      "title": "Complaint",
+      "description": "Civil maintenance defect or complaint ticket",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "category": { "type": "string", "maxLength": 64 },
+        "location": { "type": "string", "maxLength": 128 },
+        "description": { "type": "string", "maxLength": 1000 },
+        "status": { "type": "string", "enum": ["Pending", "In Progress", "Resolved"] },
+        "priority": { "type": "string", "enum": ["High", "Medium", "Low"] },
+        "reportedDate": { "type": "string", "maxLength": 32 },
+        "assignedWorker": { "type": "string", "maxLength": 128 },
+        "resolvedDate": { "type": "string", "maxLength": 32 }
+      },
+      "required": ["id", "category", "location", "description", "status", "priority", "reportedDate"]
+    },
+    "Settings": {
+      "title": "Settings",
+      "description": "System settings and spreadsheet synchronization configurations",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "institutionName": { "type": "string", "maxLength": 256 },
+        "departmentName": { "type": "string", "maxLength": 256 },
+        "defaultWorkingHours": { "type": "string", "maxLength": 64 },
+        "spreadsheetId": { "type": "string", "maxLength": 128 },
+        "spreadsheetUrl": { "type": "string", "maxLength": 500 },
+        "selectedSheetName": { "type": "string", "maxLength": 64 },
+        "autoSyncGoogleSheet": { "type": "boolean" },
+        "attendanceSheetName": { "type": "string", "maxLength": 64 },
+        "worklogSheetName": { "type": "string", "maxLength": 64 },
+        "workerSheetName": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "institutionName", "departmentName"]
+    }
+  },
+  "firestore": {
+    "/workers/{workerId}": {
+      "schema": "Worker",
+      "description": "Registered civil maintenance workers and trade master records"
+    },
+    "/attendance/{attendanceId}": {
+      "schema": "Attendance",
+      "description": "Daily attendance, session breakdown, and wage calculation records"
+    },
+    "/worklogs/{worklogId}": {
+      "schema": "Worklog",
+      "description": "Civil maintenance work logs across forenoon and afternoon sessions"
+    },
+    "/locations/{locationId}": {
+      "schema": "Location",
+      "description": "Hostel and academic campus work locations"
+    },
+    "/categories/{categoryId}": {
+      "schema": "Category",
+      "description": "Trade categories and complaint metrics"
+    },
+    "/complaints/{complaintId}": {
+      "schema": "Complaint",
+      "description": "Maintenance tickets, defect reports, and assigned labours"
+    },
+    "/settings/{settingsId}": {
+      "schema": "Settings",
+      "description": "System settings and Google Sheets sync metadata"
+    }
+  }
+}
