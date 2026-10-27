@@ -157,7 +157,7 @@ export const WorklogEntryView: React.FC = () => {
 
       // Persist to Worklog Record
       const combinedDetails =
-        fn && an ? `FN: ${fn} | AN: ${an}` : fn || an || 'General civil maintenance and upkeep';
+        fn && an ? `FN: ${fn} | AN: ${an}` : fn || an || '';
       const cleanDate = date.replace(/-/g, '');
       const worklogId = `WL-${cleanDate}-${staffId.replace(/[^a-zA-Z0-9]/g, '')}`;
 
@@ -262,8 +262,8 @@ export const WorklogEntryView: React.FC = () => {
           workerName: worker.name,
           designation: worker.designation,
           workCategory: worker.category || 'Civil Maintenance',
-          workDetailsFN: fn || 'General civil maintenance and upkeep',
-          workDetailsAN: an || 'General civil maintenance and upkeep',
+          workDetailsFN: fn || '',
+          workDetailsAN: an || '',
           attendanceFN: existingAtt?.attendanceFN || (fn ? 'Present' : 'Absent'),
           attendanceAN: existingAtt?.attendanceAN || (an ? 'Present' : 'Absent'),
           createdAt: new Date().toISOString(),
@@ -433,9 +433,6 @@ export const WorklogEntryView: React.FC = () => {
             Work details start as empty boxes. Type work details and press <kbd className="px-1.5 py-0.5 rounded bg-white border border-teal-300 font-mono font-bold text-slate-800">↵ Enter</kbd> to jump directly to the next session & labour!
           </span>
         </div>
-        <div className="text-[11px] text-teal-800 font-medium">
-          Placeholder: <span className="italic font-normal text-slate-600">"General civil maintenance and upkeep"</span>
-        </div>
       </div>
 
       {/* CARDS LIST MATCHING USER'S EXACT FORMAT */}
@@ -560,7 +557,7 @@ export const WorklogEntryView: React.FC = () => {
                         if (anInput) anInput.focus();
                       }
                     }}
-                    placeholder="General civil maintenance and upkeep"
+                    placeholder=""
                     className="w-full px-3.5 py-2.5 rounded-xl border border-teal-300/80 focus:border-teal-600 focus:ring-2 focus:ring-teal-100 text-xs sm:text-sm text-slate-800 font-medium placeholder:text-slate-400 bg-white transition"
                   />
                   <div className="flex justify-end">
@@ -621,7 +618,7 @@ export const WorklogEntryView: React.FC = () => {
                         }
                       }
                     }}
-                    placeholder="General civil maintenance and upkeep"
+                    placeholder=""
                     className="w-full px-3.5 py-2.5 rounded-xl border border-teal-300/80 focus:border-teal-600 focus:ring-2 focus:ring-teal-100 text-xs sm:text-sm text-slate-800 font-medium placeholder:text-slate-400 bg-white transition"
                   />
                   <div className="flex justify-end">

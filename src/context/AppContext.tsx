@@ -612,7 +612,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const worklogId = `WL-${r.id.replace('CMWL-', '')}`;
       const combinedDetails =
         r.workDetailsFN === r.workDetailsAN
-          ? r.workDetailsFN || 'General civil maintenance and upkeep'
+          ? r.workDetailsFN || ''
           : `FN: ${r.workDetailsFN || 'Civil work'} | AN: ${r.workDetailsAN || 'Civil work'}`;
       const location =
         r.workPlaceFN === r.workPlaceAN

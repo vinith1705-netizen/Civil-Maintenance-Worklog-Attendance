@@ -1192,7 +1192,7 @@ export const AttendanceEntryView: React.FC = () => {
                       rows={3}
                       value={edFNDetails}
                       onChange={(e) => setEdFNDetails(e.target.value)}
-                      placeholder="General civil maintenance and upkeep"
+                      placeholder=""
                       className="w-full p-2 border border-slate-300 rounded-lg resize-none"
                     />
                   </div>
@@ -1270,7 +1270,7 @@ export const AttendanceEntryView: React.FC = () => {
                       rows={3}
                       value={edANDetails}
                       onChange={(e) => setEdANDetails(e.target.value)}
-                      placeholder="General civil maintenance and upkeep"
+                      placeholder=""
                       className="w-full p-2 border border-slate-300 rounded-lg resize-none"
                     />
                   </div>
