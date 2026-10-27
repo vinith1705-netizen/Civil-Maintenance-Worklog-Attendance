@@ -1,0 +1,6 @@
+{
+  "name": "Civil Maintenance Worklog & Attendance",
+  "description": "Enterprise labour attendance, location-wise worklog tracking, wage calculation, and analytics for Bannari Amman Institute of Technology Department of Civil Maintenance.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
