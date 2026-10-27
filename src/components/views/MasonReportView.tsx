@@ -62,8 +62,8 @@ export const MasonReportView: React.FC = () => {
       `"${r.staffId}"`,
       `"${r.designation}"`,
       `"${r.workPlaceFN}"`,
-      `"${r.workDetailsFN.replace(/"/g, '""')}"`,
-      `"${r.workDetailsAN.replace(/"/g, '""')}"`,
+      `"${(r.workDetailsFN || '').replace(/"/g, '""')}"`,
+      `"${(r.workDetailsAN || '').replace(/"/g, '""')}"`,
       `"${r.attendanceFN}"`,
       r.wage,
     ]);

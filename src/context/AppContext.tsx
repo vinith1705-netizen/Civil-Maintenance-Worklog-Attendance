@@ -63,6 +63,8 @@ interface AppContextType {
   toast: ToastNotification | null;
   aiAssistantOpen: boolean;
   setAiAssistantOpen: (open: boolean) => void;
+  showUnauthorizedModal: boolean;
+  setShowUnauthorizedModal: (open: boolean) => void;
 
   workflowDate: string;
   setWorkflowDate: (date: string) => void;
@@ -116,9 +118,13 @@ interface AppContextType {
 
   // Worklog actions
   saveWorklogRecord: (
-    record: Omit<WorklogRecord, 'id' | 'createdAt'>,
+    record: Omit<WorklogRecord, 'id' | 'createdAt'> & {
+      workDetailsFN?: string;
+      workDetailsAN?: string;
+    },
     existingId?: string,
-    confirmSheetSync?: boolean
+    confirmSheetSync?: boolean,
+    showToastNotification?: boolean
   ) => Promise<{ success: boolean; record: WorklogRecord; sheetSynced?: boolean }>;
   deleteWorklogRecord: (id: string) => void;
 
@@ -165,6 +171,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   });
   const [toast, setToast] = useState<ToastNotification | null>(null);
   const [aiAssistantOpen, setAiAssistantOpen] = useState<boolean>(false);
+  const [showUnauthorizedModal, setShowUnauthorizedModal] = useState<boolean>(false);
 
   // Core Data States with localStorage persistence fallback
   const [workers, setWorkers] = useState<WorkerRecord[]>(() => {
@@ -373,7 +380,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
     } catch (err: any) {
       console.error('Login error:', err);
-      showToast('error', err.message || 'Google Sign-in was cancelled or failed.');
+      const isUnauthorizedDomain =
+        err?.code === 'auth/unauthorized-domain' ||
+        err?.message?.includes('auth/unauthorized-domain') ||
+        err?.message?.includes('unauthorized domain');
+
+      if (isUnauthorizedDomain) {
+        setShowUnauthorizedModal(true);
+        showToast(
+          'error',
+          'Domain not authorized in Firebase Auth. Follow the 3-step guide to whitelist it in Firebase Console.',
+          'Domain Not Authorized'
+        );
+      } else {
+        showToast('error', err.message || 'Google Sign-in was cancelled or failed.');
+      }
     } finally {
       setIsLoggingIn(false);
     }
@@ -689,9 +710,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   // Worklog Management
   const saveWorklogRecord = async (
-    recordInput: Omit<WorklogRecord, 'id' | 'createdAt'>,
+    recordInput: Omit<WorklogRecord, 'id' | 'createdAt'> & {
+      workDetailsFN?: string;
+      workDetailsAN?: string;
+    },
     existingId?: string,
-    confirmSheetSync: boolean = true
+    confirmSheetSync: boolean = true,
+    showToastNotification: boolean = true
   ): Promise<{ success: boolean; record: WorklogRecord; sheetSynced?: boolean }> => {
     const isEdit = Boolean(existingId);
     const now = new Date().toISOString();
@@ -703,7 +728,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
 
     const finalRecord: WorklogRecord = {
-      ...recordInput,
+      date: recordInput.date,
+      staffId: recordInput.staffId,
+      workerName: recordInput.workerName,
+      designation: recordInput.designation,
+      workCategory: recordInput.workCategory,
+      workLocation: recordInput.workLocation,
+      workDetails: recordInput.workDetails,
+      session: recordInput.session,
+      status: recordInput.status,
+      remarks: recordInput.remarks,
       id: recordId,
       createdAt: isEdit ? worklogs.find((w) => w.id === existingId)?.createdAt || now : now,
       syncedToSheet: false,
@@ -716,6 +750,86 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } else {
       setWorklogs((prev) => [finalRecord, ...prev]);
     }
+
+    // Keep attendance record in sync so daily reports and other views see the work description
+    let fnWork = recordInput.workDetailsFN;
+    let anWork = recordInput.workDetailsAN;
+
+    if (fnWork === undefined && anWork === undefined && finalRecord.workDetails) {
+      const text = finalRecord.workDetails;
+      if (text.includes('FN:') || text.includes('AN:')) {
+        const fnMatch = text.match(/FN:\s*([^|]+)/i);
+        const anMatch = text.match(/AN:\s*(.+)$/i);
+        if (fnMatch) fnWork = fnMatch[1].trim();
+        if (anMatch) anWork = anMatch[1].trim();
+      } else {
+        fnWork = text;
+      }
+    }
+
+    setAttendance((prev) => {
+      const existing = prev.find(
+        (a) => a.date === finalRecord.date && a.staffId.toLowerCase() === finalRecord.staffId.toLowerCase()
+      );
+      if (existing) {
+        return prev.map((a) => {
+          if (a.date === finalRecord.date && a.staffId.toLowerCase() === finalRecord.staffId.toLowerCase()) {
+            const updatedAtt: AttendanceRecord = {
+              ...a,
+              workDetailsFN: fnWork !== undefined ? fnWork : a.workDetailsFN,
+              workDetailsAN: anWork !== undefined ? anWork : a.workDetailsAN,
+              updatedAt: now,
+            };
+            if (currentUser) {
+              setDoc(doc(db, 'attendance', updatedAtt.id), updatedAtt).catch((e) =>
+                console.warn('Firestore attendance sync warning:', e)
+              );
+            }
+            return updatedAtt;
+          }
+          return a;
+        });
+      }
+
+      // If no attendance record exists yet, create one paired with this worklog
+      const worker = workers.find((w) => w.staffId.toLowerCase() === finalRecord.staffId.toLowerCase());
+      const cleanDate = finalRecord.date.replace(/-/g, '');
+      const cleanStaff = finalRecord.staffId.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+      const countForDay = prev.filter((a) => a.date === finalRecord.date).length + 1;
+      const serial = String(countForDay).padStart(3, '0');
+      const newAttId = `CMWL-${cleanDate}-${cleanStaff}-${serial}`;
+
+      const newAtt: AttendanceRecord = {
+        id: newAttId,
+        date: finalRecord.date,
+        staffId: finalRecord.staffId,
+        eId: worker?.eId || '',
+        workerName: finalRecord.workerName,
+        designation: finalRecord.designation,
+        workCategory: finalRecord.workCategory,
+        workPlaceFN: finalRecord.workLocation || 'Campus Sites',
+        workPlaceAN: finalRecord.workLocation || 'Campus Sites',
+        workDetailsFN: fnWork || '',
+        workDetailsAN: anWork || '',
+        attendanceFN: 'Present',
+        attendanceAN: 'Present',
+        calculatedWage: worker?.perDayWage || 850,
+        wage: worker?.perDayWage || 850,
+        status: 'Approved',
+        remarks: finalRecord.remarks || `Logged via Worklog Entry on ${finalRecord.date}`,
+        createdAt: now,
+        updatedAt: now,
+        syncedToSheet: false,
+      };
+
+      if (currentUser) {
+        setDoc(doc(db, 'attendance', newAtt.id), newAtt).catch((e) =>
+          console.warn('Firestore attendance sync warning:', e)
+        );
+      }
+
+      return [newAtt, ...prev];
+    });
 
     if (confirmSheetSync && settings.spreadsheetId && accessToken) {
       try {
@@ -745,7 +859,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       );
     }
 
-    showToast('success', isEdit ? 'Worklog updated' : 'New worklog entry saved');
+    if (showToastNotification) {
+      showToast('success', isEdit ? 'Worklog updated' : 'New worklog entry saved');
+    }
     return { success: true, record: finalRecord, sheetSynced };
   };
 
@@ -1295,6 +1411,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       toast,
       aiAssistantOpen,
       setAiAssistantOpen,
+      showUnauthorizedModal,
+      setShowUnauthorizedModal,
       handleGoogleLogin,
       handleGoogleLogout,
       showToast,
@@ -1348,6 +1466,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       syncStatus,
       toast,
       aiAssistantOpen,
+      showUnauthorizedModal,
     ]
   );
 

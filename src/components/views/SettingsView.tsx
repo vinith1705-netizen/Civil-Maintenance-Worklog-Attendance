@@ -35,6 +35,7 @@ export const SettingsView: React.FC = () => {
     updateWorklogToGoogleSheet,
     updateAllToGoogleSheet,
     showToast,
+    setShowUnauthorizedModal,
   } = useApp();
 
   const [institutionName, setInstitutionName] = useState(settings.institutionName);
@@ -124,17 +125,35 @@ export const SettingsView: React.FC = () => {
         </div>
 
         {!currentUser ? (
-          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
             <div>
-              <div className="font-bold text-slate-900">Google Workspace Sign-In Required</div>
-              <p className="mt-0.5">Please sign in with Google to grant permission to read and write to your Google Sheets.</p>
+              <div className="font-bold text-slate-900 text-sm">Google Workspace Sign-In Required</div>
+              <p className="mt-0.5">
+                Sign in with Google to sync directly to Google Sheets and Firestore.
+              </p>
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+                <span className="font-medium">Current Domain:</span>
+                <code className="bg-slate-200/80 px-1.5 py-0.5 rounded text-slate-800 font-mono text-[10px]">
+                  {typeof window !== 'undefined' ? window.location.hostname : 'run.app'}
+                </code>
+              </div>
             </div>
-            <button
-              onClick={handleGoogleLogin}
-              className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-semibold shrink-0"
-            >
-              Sign in with Google
-            </button>
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowUnauthorizedModal(true)}
+                className="px-3 py-2 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-xl font-semibold text-xs transition cursor-pointer"
+              >
+                Domain Setup Guide
+              </button>
+              <button
+                type="button"
+                onClick={handleGoogleLogin}
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-semibold text-xs shadow-xs transition cursor-pointer"
+              >
+                Sign in with Google
+              </button>
+            </div>
           </div>
         ) : (
           <div className="space-y-4">

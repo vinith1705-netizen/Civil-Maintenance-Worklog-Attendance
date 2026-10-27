@@ -4,6 +4,7 @@ import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { Toast } from './components/Toast';
 import { AiAssistantDrawer } from './components/AiAssistantDrawer';
+import { UnauthorizedDomainModal } from './components/UnauthorizedDomainModal';
 
 // Views
 import { DashboardView } from './components/views/DashboardView';
@@ -21,7 +22,7 @@ import { SearchFilterView } from './components/views/SearchFilterView';
 import { SettingsView } from './components/views/SettingsView';
 
 const MainLayout: React.FC = () => {
-  const { activeTab } = useApp();
+  const { activeTab, showUnauthorizedModal, setShowUnauthorizedModal, handleGoogleLogin } = useApp();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const renderActiveView = () => {
@@ -76,6 +77,16 @@ const MainLayout: React.FC = () => {
 
       {/* Global Notifications */}
       <Toast />
+
+      {/* Firebase Auth Domain Authorization Dialog */}
+      <UnauthorizedDomainModal
+        isOpen={showUnauthorizedModal}
+        onClose={() => setShowUnauthorizedModal(false)}
+        onRetry={() => {
+          setShowUnauthorizedModal(false);
+          handleGoogleLogin();
+        }}
+      />
     </div>
   );
 };

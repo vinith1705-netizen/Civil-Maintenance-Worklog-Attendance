@@ -106,21 +106,16 @@ export const AttendanceEntryView: React.FC = () => {
         const primaryStatus: RowAttendanceStatus = isPresent ? 'Present' : isAbsent ? 'Absent' : existing.attendanceFN;
         let fnDetails = existing.workDetailsFN || '';
         let anDetails = existing.workDetailsAN || '';
-        if (
-          fnDetails.toLowerCase().includes('general civil maintenance') ||
-          fnDetails === 'Daily civil maintenance work' ||
-          fnDetails.toLowerCase().includes('parapet wall')
-        ) {
-          fnDetails = '';
-        }
-        if (
-          anDetails.toLowerCase().includes('general civil maintenance') ||
-          anDetails === 'Daily civil maintenance work' ||
-          anDetails.toLowerCase().includes('parapet wall') ||
-          anDetails.toLowerCase().includes('second floor corridor tile')
-        ) {
-          anDetails = '';
-        }
+        const isLegacySample = (text: string) => {
+          const t = text.trim();
+          return (
+            t === 'Parapet wall brick plastering and water sump ledge masonry repair work.' ||
+            t === 'Parapet wall brick plastering and water sump ledge masonry repair work' ||
+            t === 'Second floor corridor tile joints grouting and skirting fixing'
+          );
+        };
+        if (isLegacySample(fnDetails)) fnDetails = '';
+        if (isLegacySample(anDetails)) anDetails = '';
 
         return {
           worker,
