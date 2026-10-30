@@ -8,8 +8,10 @@ import {
   RefreshCw,
   X,
   HardDrive,
+  UserCheck,
   Key,
 } from 'lucide-react';
+import { useApp } from '../context/AppContext';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 interface UnauthorizedDomainModalProps {
@@ -23,9 +25,9 @@ export const UnauthorizedDomainModal: React.FC<UnauthorizedDomainModalProps> = (
   onClose,
   onRetry,
 }) => {
+  const { loginAsSupervisor } = useApp();
   const [copied, setCopied] = useState(false);
-  const [showManualToken, setShowManualToken] = useState(false);
-  const [manualTokenInput, setManualTokenInput] = useState('');
+  const [copiedUrl, setCopiedUrl] = useState(false);
 
   if (!isOpen) return null;
 
@@ -38,6 +40,12 @@ export const UnauthorizedDomainModal: React.FC<UnauthorizedDomainModalProps> = (
     navigator.clipboard.writeText(currentHostname);
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
+  };
+
+  const handleCopyUrl = () => {
+    navigator.clipboard.writeText(consoleAuthUrl);
+    setCopiedUrl(true);
+    setTimeout(() => setCopiedUrl(false), 2500);
   };
 
   return (
@@ -69,16 +77,15 @@ export const UnauthorizedDomainModal: React.FC<UnauthorizedDomainModalProps> = (
 
         {/* Explanation */}
         <p className="text-xs text-slate-600 mb-4 leading-relaxed">
-          Firebase Authentication restricts Google Sign-In to authorized web domains. Because this
-          app is running on Google Cloud Run/AI Studio preview, this domain needs to be added to your
-          Firebase project's Authorized Domains list.
+          Google Sign-In restricts logins to authorized domains. Because this app is running on
+          Vercel (<strong className="text-slate-800 font-mono">{currentHostname}</strong>), you can either add this domain to Firebase Console, or sign in instantly with <strong>Offline Supervisor Mode</strong> below.
         </p>
 
         {/* Domain to Copy Box */}
         <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 mb-4">
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">
-              Domain to Authorize:
+              Domain to Authorize in Firebase:
             </span>
             <button
               type="button"
@@ -103,21 +110,21 @@ export const UnauthorizedDomainModal: React.FC<UnauthorizedDomainModalProps> = (
             </button>
           </div>
           <div className="bg-white border border-slate-200 rounded-lg p-2 font-mono text-xs text-slate-800 break-all select-all font-semibold">
-            {currentHostname || 'ais-dev-mfmpf7sl5hafqwsmbvnytx-987274072848.asia-southeast1.run.app'}
+            {currentHostname || 'civil-maintenance-worklog-attendanc.vercel.app'}
           </div>
         </div>
 
         {/* 3 Step Resolution Guide */}
         <div className="space-y-2.5 mb-5 text-xs text-slate-700">
-          <div className="font-bold text-slate-900 text-xs">How to fix in 30 seconds:</div>
+          <div className="font-bold text-slate-900 text-xs">How to authorize in Firebase Console (30 seconds):</div>
 
-          <div className="flex items-start gap-2.5 p-2.5 bg-indigo-50/60 rounded-xl border border-indigo-100">
+          <div className="flex items-start gap-2.5 p-3 bg-indigo-50/60 rounded-xl border border-indigo-100">
             <span className="w-5 h-5 rounded-full bg-indigo-600 text-white font-bold text-[11px] flex items-center justify-center shrink-0">
               1
             </span>
             <div className="flex-1">
               <span className="font-semibold text-slate-900">Open Firebase Authentication Settings:</span>
-              <div className="mt-1.5">
+              <div className="mt-2 flex flex-wrap items-center gap-2">
                 <a
                   href={consoleAuthUrl}
                   target="_blank"
@@ -127,6 +134,13 @@ export const UnauthorizedDomainModal: React.FC<UnauthorizedDomainModalProps> = (
                   <span>Open Firebase Console Settings</span>
                   <ExternalLink className="w-3.5 h-3.5" />
                 </a>
+                <button
+                  type="button"
+                  onClick={handleCopyUrl}
+                  className="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-xs font-medium transition cursor-pointer"
+                >
+                  {copiedUrl ? 'Copied URL!' : 'Copy Link'}
+                </button>
               </div>
             </div>
           </div>
@@ -140,7 +154,7 @@ export const UnauthorizedDomainModal: React.FC<UnauthorizedDomainModalProps> = (
                 Go to "Authorized domains" section:
               </span>
               <p className="text-slate-500 text-[11px] mt-0.5">
-                Click <span className="font-semibold text-slate-700">"Add domain"</span> button at the bottom of the list.
+                Scroll down and click the <strong className="text-slate-800">"Add domain"</strong> button.
               </p>
             </div>
           </div>
@@ -152,21 +166,29 @@ export const UnauthorizedDomainModal: React.FC<UnauthorizedDomainModalProps> = (
             <div>
               <span className="font-semibold text-slate-900">Paste and Save:</span>
               <p className="text-slate-500 text-[11px] mt-0.5">
-                Paste the domain and click <span className="font-semibold text-slate-700">Done</span>. Then return here and click "Try Sign-In Again".
+                Paste <code className="bg-slate-200 px-1 py-0.5 rounded font-mono text-slate-800">{currentHostname}</code> and click <strong className="text-slate-800">Done</strong>. Then return and click "Try Sign-In Again".
               </p>
             </div>
           </div>
         </div>
 
-        {/* Offline / Local Mode Reassurance */}
-        <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 mb-5 flex items-start gap-2.5 text-xs text-emerald-800">
-          <HardDrive className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-          <div>
-            <div className="font-bold text-emerald-900">Work is Never Lost (Local Storage Active)</div>
-            <p className="text-[11px] text-emerald-700 mt-0.5">
-              All 34 labours, daily attendance, wage calculations, work categories, and daily worklogs are safely persisted in your browser's local storage and can be exported as Excel/CSV anytime.
-            </p>
+        {/* Offline / Local Supervisor Option */}
+        <div className="p-3.5 bg-emerald-50 rounded-xl border border-emerald-200 mb-5 text-xs text-emerald-900 space-y-2">
+          <div className="flex items-center gap-2">
+            <UserCheck className="w-4 h-4 text-emerald-700" />
+            <span className="font-bold text-emerald-950">Don't have Firebase Console access right now?</span>
           </div>
+          <p className="text-[11px] text-emerald-800">
+            You can sign in immediately as <strong>Site Supervisor</strong>. All 34 labours, daily attendance, wage calculations, worklog entries, PDF reports, and Excel export work seamlessly without needing Google authentication.
+          </p>
+          <button
+            type="button"
+            onClick={() => loginAsSupervisor('Site Supervisor')}
+            className="w-full py-2 px-3 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg font-bold text-xs shadow-xs transition flex items-center justify-center gap-1.5 cursor-pointer"
+          >
+            <UserCheck className="w-3.5 h-3.5" />
+            <span>Sign In as Site Supervisor (Offline Mode)</span>
+          </button>
         </div>
 
         {/* Action Buttons */}
@@ -176,7 +198,7 @@ export const UnauthorizedDomainModal: React.FC<UnauthorizedDomainModalProps> = (
             onClick={onClose}
             className="px-4 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-semibold text-xs hover:bg-slate-100 transition cursor-pointer text-center"
           >
-            Continue in Local Storage Mode
+            Close / Use Locally
           </button>
 
           <button

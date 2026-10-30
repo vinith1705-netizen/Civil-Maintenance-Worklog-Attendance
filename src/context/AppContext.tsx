@@ -10,6 +10,7 @@ import {
   ViewTab,
   AttendanceStatus,
   ComplaintRecord,
+  ALLOWED_WORK_CATEGORIES,
 } from '../types';
 import {
   INITIAL_WORKERS,
@@ -72,6 +73,7 @@ interface AppContextType {
   // Actions
   handleGoogleLogin: () => Promise<void>;
   handleGoogleLogout: () => Promise<void>;
+  loginAsSupervisor: (name?: string) => void;
   showToast: (type: ToastNotification['type'], message: string, title?: string) => void;
   clearToast: () => void;
   
@@ -173,11 +175,37 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [aiAssistantOpen, setAiAssistantOpen] = useState<boolean>(false);
   const [showUnauthorizedModal, setShowUnauthorizedModal] = useState<boolean>(false);
 
+  // Helper to ensure all trades map strictly into the 3 designated categories
+  const normalizeToAllowedCategory = (categoryOrDesignation?: string): string => {
+    if (!categoryOrDesignation) return 'Mason Work';
+    const lower = categoryOrDesignation.toLowerCase();
+    if (lower.includes('carpent') || lower.includes('polish') || lower.includes('wood')) {
+      return 'Carpentry Work';
+    }
+    if (lower.includes('weld') || lower.includes('grill') || lower.includes('fabricat')) {
+      return 'Welding Work';
+    }
+    return 'Mason Work';
+  };
+
   // Core Data States with localStorage persistence fallback
   const [workers, setWorkers] = useState<WorkerRecord[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.WORKERS);
-      return saved ? JSON.parse(saved) : INITIAL_WORKERS;
+      if (saved) {
+        const parsed: WorkerRecord[] = JSON.parse(saved);
+        // If stored data contains the official roster (e.g., CM40768) and doesn't contain old mock CM41001
+        if (parsed.some((w) => w.staffId === 'CM40768') && !parsed.some((w) => w.staffId === 'CM41001')) {
+          return parsed.map((w) => ({
+            ...w,
+            category: ALLOWED_WORK_CATEGORIES.includes(w.category as any)
+              ? w.category
+              : normalizeToAllowedCategory(w.category || w.designation),
+          }));
+        }
+      }
+      localStorage.setItem(STORAGE_KEYS.WORKERS, JSON.stringify(INITIAL_WORKERS));
+      return INITIAL_WORKERS;
     } catch {
       return INITIAL_WORKERS;
     }
@@ -195,26 +223,55 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [categories, setCategories] = useState<WorkCategoryRecord[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.CATEGORIES);
-      return saved ? JSON.parse(saved) : INITIAL_CATEGORIES;
+      if (saved) {
+        const parsed: WorkCategoryRecord[] = JSON.parse(saved);
+        // Strictly filter to the 3 permitted categories
+        const filtered = parsed.filter((c) =>
+          ALLOWED_WORK_CATEGORIES.includes(c.name as any)
+        );
+        if (filtered.length === ALLOWED_WORK_CATEGORIES.length) {
+          return filtered;
+        }
+      }
+      return INITIAL_CATEGORIES;
     } catch {
       return INITIAL_CATEGORIES;
     }
   });
+
+  // Deduplicate attendance records by (date + staffId) to prevent React key collision
+  const deduplicateAttendanceRecords = (records: AttendanceRecord[]): AttendanceRecord[] => {
+    const map = new Map<string, AttendanceRecord>();
+    records.forEach((a) => {
+      if (!a || !a.staffId) return;
+      const key = `${a.date}_${a.staffId.toLowerCase()}`;
+      map.set(key, a);
+    });
+    return Array.from(map.values());
+  };
 
   const [attendance, setAttendance] = useState<AttendanceRecord[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.ATTENDANCE);
       if (saved) {
         const parsed: AttendanceRecord[] = JSON.parse(saved);
-        return parsed.map((a) => ({
-          ...a,
-          workDetailsFN: a.workDetailsFN?.includes('Parapet wall brick plastering') ? '' : a.workDetailsFN,
-          workDetailsAN: a.workDetailsAN?.includes('Parapet wall brick plastering') || a.workDetailsAN?.includes('Second floor corridor tile joints') ? '' : a.workDetailsAN,
-        }));
+        // Only keep saved if it references the current official roster
+        if (parsed.some((a) => a.staffId === 'CM40768') && !parsed.some((a) => a.staffId === 'CM41001')) {
+          const cleaned = parsed.map((a) => ({
+            ...a,
+            workCategory: ALLOWED_WORK_CATEGORIES.includes(a.workCategory as any)
+              ? a.workCategory
+              : normalizeToAllowedCategory(a.workCategory || a.designation),
+            workDetailsFN: a.workDetailsFN?.includes('Parapet wall brick plastering') ? '' : a.workDetailsFN,
+            workDetailsAN: a.workDetailsAN?.includes('Parapet wall brick plastering') || a.workDetailsAN?.includes('Second floor corridor tile joints') ? '' : a.workDetailsAN,
+          }));
+          return deduplicateAttendanceRecords(cleaned);
+        }
       }
-      return INITIAL_ATTENDANCE;
+      localStorage.setItem(STORAGE_KEYS.ATTENDANCE, JSON.stringify(INITIAL_ATTENDANCE));
+      return deduplicateAttendanceRecords(INITIAL_ATTENDANCE);
     } catch {
-      return INITIAL_ATTENDANCE;
+      return deduplicateAttendanceRecords(INITIAL_ATTENDANCE);
     }
   });
 
@@ -223,11 +280,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const saved = localStorage.getItem(STORAGE_KEYS.WORKLOGS);
       if (saved) {
         const parsed: WorklogRecord[] = JSON.parse(saved);
-        return parsed.map((w) => ({
-          ...w,
-          workDetails: w.workDetails?.includes('Parapet wall brick plastering') ? '' : w.workDetails,
-        }));
+        if (parsed.some((w) => w.staffId === 'CM40768') && !parsed.some((w) => w.staffId === 'CM41001')) {
+          return parsed.map((w) => ({
+            ...w,
+            workCategory: ALLOWED_WORK_CATEGORIES.includes(w.workCategory as any)
+              ? w.workCategory
+              : normalizeToAllowedCategory(w.workCategory || w.designation),
+            workDetails: w.workDetails?.includes('Parapet wall brick plastering') ? '' : w.workDetails,
+          }));
+        }
       }
+      localStorage.setItem(STORAGE_KEYS.WORKLOGS, JSON.stringify(INITIAL_WORKLOGS));
       return INITIAL_WORKLOGS;
     } catch {
       return INITIAL_WORKLOGS;
@@ -237,7 +300,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [complaints, setComplaints] = useState<ComplaintRecord[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.COMPLAINTS);
-      return saved ? JSON.parse(saved) : INITIAL_COMPLAINTS;
+      if (saved) {
+        const parsed: ComplaintRecord[] = JSON.parse(saved);
+        return parsed.map((c) => ({
+          ...c,
+          category: ALLOWED_WORK_CATEGORIES.includes(c.category as any)
+            ? c.category
+            : normalizeToAllowedCategory(c.category),
+        }));
+      }
+      return INITIAL_COMPLAINTS;
     } catch {
       return INITIAL_COMPLAINTS;
     }
@@ -409,6 +481,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } catch (err: any) {
       showToast('error', err.message || 'Error signing out');
     }
+  };
+
+  const loginAsSupervisor = (name: string = 'Site Supervisor') => {
+    const localUser: any = {
+      uid: 'local-supervisor-01',
+      displayName: name,
+      email: 'supervisor@bitsathy.ac.in',
+      photoURL: null,
+      isLocalSupervisor: true,
+    };
+    setCurrentUser(localUser);
+    setShowUnauthorizedModal(false);
+    showToast('success', `Signed in as ${name} (Standalone / Local Mode)`, 'Supervisor Mode Active');
   };
 
   // Wage Calculation Rule Engine
@@ -914,8 +999,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     showToast('success', `Updated location: ${loc.name}`);
   };
 
-  // Category Actions
+  // Category Actions (Strictly Mason Work, Carpentry Work, Welding Work)
   const addCategory = (catInput: Omit<WorkCategoryRecord, 'id'>) => {
+    const isAllowed = ALLOWED_WORK_CATEGORIES.includes(catInput.name as any);
+    if (!isAllowed) {
+      showToast('error', `Only Mason Work, Carpentry Work, and Welding Work are supported.`);
+      return;
+    }
+    const existing = categories.find((c) => c.name.toLowerCase() === catInput.name.toLowerCase());
+    if (existing) {
+      updateCategory({ ...existing, ...catInput });
+      return;
+    }
     const id = `cat-${Date.now()}`;
     const newCat: WorkCategoryRecord = {
       ...catInput,
@@ -925,7 +1020,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       resolvedComplaints: catInput.resolvedComplaints ?? 0,
     };
     setCategories((prev) => [...prev, newCat]);
-    showToast('success', `Added category: ${newCat.name}`);
+    showToast('success', `Saved trade category: ${newCat.name}`);
   };
 
   const updateCategory = (cat: WorkCategoryRecord) => {
@@ -1332,11 +1427,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (!settings.spreadsheetId) throw new Error('No Google Spreadsheet linked in Settings.');
 
     const targetDate = customDate || workflowDate || getTodayDateString();
-    const recordsForDate = attendance.filter((a) => a.date === targetDate);
-    const recordsToSync = recordsForDate.length > 0 ? recordsForDate : attendance;
+    // Daily Worklog in Google Sheet strictly includes ONLY Present workers (Absent workers are excluded)
+    const recordsForDate = attendance.filter(
+      (a) => a.date === targetDate && (a.attendanceFN === 'Present' || a.attendanceAN === 'Present')
+    );
+    const recordsToSync = recordsForDate;
+
+    if (recordsToSync.length === 0) {
+      showToast('warning', `No labours marked 'Present' found for ${targetDate}. Complete Step 1 Attendance roll call first.`);
+      return { success: false, count: 0 };
+    }
 
     setIsSyncing(true);
-    setSyncStatus({ status: 'syncing', message: `Updating ${recordsToSync.length} worklog rows to Google Sheet...` });
+    setSyncStatus({ status: 'syncing', message: `Updating ${recordsToSync.length} present worklog rows to Google Sheet...` });
 
     try {
       const res = await batchUpdateWorklogToSheet(
@@ -1415,6 +1518,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setShowUnauthorizedModal,
       handleGoogleLogin,
       handleGoogleLogout,
+      loginAsSupervisor,
       showToast,
       clearToast,
       addWorker,

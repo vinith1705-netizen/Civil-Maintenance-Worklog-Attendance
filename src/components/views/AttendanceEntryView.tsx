@@ -160,7 +160,9 @@ export const AttendanceEntryView: React.FC = () => {
         r.worker.designation.toLowerCase().includes(searchQuery.toLowerCase());
 
       const matchTrade =
-        filterTrade === 'All' || r.worker.designation.toLowerCase().includes(filterTrade.toLowerCase());
+        filterTrade === 'All' ||
+        r.worker.category?.toLowerCase() === filterTrade.toLowerCase() ||
+        r.worker.designation.toLowerCase().includes(filterTrade.toLowerCase());
 
       const matchStatus = filterStatus === 'All' || r.status === filterStatus;
 
@@ -546,7 +548,7 @@ export const AttendanceEntryView: React.FC = () => {
         : 0;
 
       return {
-        id: r.existingRecordId || `CMWL-${cleanDate}-${cleanStaff}-${String(idx + 1).padStart(3, '0')}`,
+        id: `CMWL-${cleanDate}-${cleanStaff}-${String(idx + 1).padStart(3, '0')}`,
         date,
         staffId: r.worker.staffId,
         eId: r.worker.eId,
@@ -727,13 +729,10 @@ export const AttendanceEntryView: React.FC = () => {
             onChange={(e) => setFilterTrade(e.target.value)}
             className="px-3 py-1.5 text-xs rounded-xl border border-slate-300 bg-white font-medium cursor-pointer"
           >
-            <option value="All">All Trades ({workers.length})</option>
-            <option value="Mason">Masons</option>
-            <option value="Tiles">Tiles Masons</option>
-            <option value="Carpent">Carpenters</option>
-            <option value="Welder">Welders</option>
-            <option value="Helper">Helpers</option>
-            <option value="Polish">Polishers</option>
+            <option value="All">All Categories ({workers.length})</option>
+            <option value="Mason Work">Mason Work</option>
+            <option value="Carpentry Work">Carpentry Work</option>
+            <option value="Welding Work">Welding Work</option>
           </select>
 
           <select
@@ -814,7 +813,7 @@ export const AttendanceEntryView: React.FC = () => {
 
           return (
             <div
-              key={row.worker.id}
+              key={`${row.worker.staffId || row.worker.id}-${idx}`}
               id={`labour-card-${row.worker.staffId}`}
               onClick={() => setSelectedStaffId(row.worker.staffId)}
               className={`bg-white rounded-2xl p-3 sm:p-3.5 px-4 sm:px-5 shadow-xs transition duration-150 flex items-center justify-between gap-4 ${

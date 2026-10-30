@@ -8,11 +8,16 @@ import {
   Download,
   BarChart3,
   TrendingUp,
+  Layers,
+  AlertCircle,
+  CheckCircle2,
+  FileText,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { getTodayDateString } from '../../data/seedData';
 
 export const MonthlyReportView: React.FC = () => {
-  const { attendance, workers, categories, locations, showToast } = useApp();
+  const { attendance, workers, categories, locations, complaints, showToast } = useApp();
 
   const currentYear = new Date().getFullYear();
   const currentMonthNum = new Date().getMonth() + 1;
@@ -22,10 +27,21 @@ export const MonthlyReportView: React.FC = () => {
 
   const monthStr = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
 
+  const monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December',
+  ];
+
   // Filter records for this month
   const monthRecords = useMemo(
     () => attendance.filter((a) => a.date.startsWith(monthStr)),
     [attendance, monthStr]
+  );
+
+  // Filter complaints for this month
+  const monthComplaints = useMemo(
+    () => complaints.filter((c) => c.reportedDate && c.reportedDate.startsWith(monthStr)),
+    [complaints, monthStr]
   );
 
   // Key Metrics
@@ -34,6 +50,114 @@ export const MonthlyReportView: React.FC = () => {
   const totalWorkingDays = new Set(monthRecords.map((a) => a.date)).size;
   const totalWagesMonth = monthRecords.reduce((sum, r) => sum + (r.wage || 0), 0);
   const uniqueWorkersCount = new Set(monthRecords.map((a) => a.staffId)).size;
+
+  // Work Categories & Complaint Count Monthly Breakdown
+  const categoryComplaintBreakdown = useMemo(() => {
+    return categories.map((cat) => {
+      const catComplaints = monthComplaints.filter(
+        (c) => c.category.toLowerCase() === cat.name.toLowerCase()
+      );
+      const total = catComplaints.length;
+      const pending = catComplaints.filter((c) => c.status === 'Pending').length;
+      const inProgress = catComplaints.filter((c) => c.status === 'In Progress').length;
+      const resolved = catComplaints.filter((c) => c.status === 'Resolved').length;
+      const resolutionRate = total > 0 ? Math.round((resolved / total) * 100) : 100;
+      
+      const assignedLabours = workers.filter((w) => {
+        const wCat = (w.category || '').toLowerCase();
+        const wDesig = (w.designation || '').toLowerCase();
+        const target = cat.name.toLowerCase();
+        return wCat.includes(target) || wDesig.includes(target) || target.includes(wCat) || target.includes(wDesig);
+      }).length;
+
+      return {
+        category: cat,
+        total,
+        pending,
+        inProgress,
+        resolved,
+        resolutionRate,
+        assignedLabours,
+      };
+    });
+  }, [categories, monthComplaints, workers]);
+
+  const totalMonthComplaints = categoryComplaintBreakdown.reduce((sum, c) => sum + c.total, 0);
+  const totalMonthResolved = categoryComplaintBreakdown.reduce((sum, c) => sum + c.resolved, 0);
+  const totalMonthPending = categoryComplaintBreakdown.reduce((sum, c) => sum + c.pending, 0);
+
+  // Export Work Categories & Complaint Count CSV
+  const handleExportCategoryComplaintsCSV = () => {
+    const monthLabel = `${monthNames[selectedMonth - 1]} ${selectedYear}`;
+    const lines: string[] = [];
+
+    lines.push(`"BANNARI AMMAN INSTITUTE OF TECHNOLOGY - DEPARTMENT OF CIVIL MAINTENANCE"`);
+    lines.push(`"WORK CATEGORIES & COMPLAINT COUNT MONTHLY REPORT - ${monthLabel.toUpperCase()}"`);
+    lines.push(`"Generated On: ${getTodayDateString()}","Permitted Categories: Mason Work, Carpentry Work, Welding Work"`);
+    lines.push('');
+
+    lines.push('"--- WORK CATEGORIES & COMPLAINT COUNT BREAKDOWN ---"');
+    lines.push('"S.No","Work Category","Total Complaints","Pending","In Progress","Resolved","Resolution Rate (%)","Assigned Workers"');
+    categoryComplaintBreakdown.forEach((item, idx) => {
+      lines.push(
+        [
+          idx + 1,
+          `"${item.category.name}"`,
+          item.total,
+          item.pending,
+          item.inProgress,
+          item.resolved,
+          `"${item.resolutionRate}%"`,
+          item.assignedLabours,
+        ].join(',')
+      );
+    });
+    lines.push(
+      [
+        '"TOTAL"',
+        '"ALL 3 CIVIL TRADES"',
+        totalMonthComplaints,
+        totalMonthPending,
+        categoryComplaintBreakdown.reduce((s, c) => s + c.inProgress, 0),
+        totalMonthResolved,
+        `"${totalMonthComplaints > 0 ? Math.round((totalMonthResolved / totalMonthComplaints) * 100) : 100}%"`,
+        workers.length,
+      ].join(',')
+    );
+    lines.push('');
+
+    lines.push('"--- DETAILED COMPLAINT TICKETS REGISTER ---"');
+    lines.push('"Ticket ID","Work Category","Location","Complaint Description","Priority","Status","Reported Date","Resolved Date","Assigned Specialist"');
+    if (monthComplaints.length === 0) {
+      lines.push('"No complaints logged for this month."');
+    } else {
+      monthComplaints.forEach((c) => {
+        lines.push(
+          [
+            `"${c.id}"`,
+            `"${c.category}"`,
+            `"${c.location}"`,
+            `"${(c.description || '').replace(/"/g, '""')}"`,
+            `"${c.priority}"`,
+            `"${c.status}"`,
+            `"${c.reportedDate}"`,
+            `"${c.resolvedDate || '-'}"`,
+            `"${c.assignedWorker || 'Unassigned'}"`,
+          ].join(',')
+        );
+      });
+    }
+
+    const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + lines.join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `BIT_Civil_Work_Categories_Complaint_Monthly_Report_${monthStr}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast('success', `Exported Work Categories & Complaint Count Report for ${monthLabel}.`);
+  };
 
   // Category Totals
   const categoryTotals = useMemo(() => {
@@ -137,11 +261,6 @@ export const MonthlyReportView: React.FC = () => {
     showToast('success', 'Monthly Report exported to CSV.');
   };
 
-  const monthNames = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December',
-  ];
-
   const maxWage = Math.max(...categoryTotals.map((c) => c[1].wages), 1000);
 
   return (
@@ -187,17 +306,25 @@ export const MonthlyReportView: React.FC = () => {
 
           <button
             onClick={() => window.print()}
-            className="px-3 py-2 rounded-xl border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center gap-1.5"
+            className="px-3 py-2 rounded-xl border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
           >
             <Printer className="w-3.5 h-3.5" />
             <span>Print Report</span>
           </button>
           <button
-            onClick={handleExportCSV}
-            className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-md shadow-amber-600/30 flex items-center gap-1.5"
+            onClick={handleExportCategoryComplaintsCSV}
+            className="px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-md shadow-amber-600/30 flex items-center gap-1.5 cursor-pointer"
+            title="Download Work Categories & Complaint Count Monthly Report (CSV)"
           >
             <Download className="w-3.5 h-3.5" />
-            <span>Export CSV</span>
+            <span>Download Category Complaints</span>
+          </button>
+          <button
+            onClick={handleExportCSV}
+            className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold shadow-md shadow-slate-900/30 flex items-center gap-1.5 cursor-pointer"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>Export Wages CSV</span>
           </button>
         </div>
       </div>
@@ -238,6 +365,116 @@ export const MonthlyReportView: React.FC = () => {
             <span className="text-[10px] text-slate-400 uppercase font-semibold">Total Roll Entries</span>
             <div className="text-xl font-extrabold text-white mt-0.5">{totalAttendanceRoll}</div>
           </div>
+        </div>
+      </div>
+
+      {/* WORK CATEGORIES & COMPLAINT COUNT MONTHLY SUMMARY */}
+      <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-bold uppercase tracking-wider">
+                3 Civil Trades
+              </span>
+              <span className="text-xs text-slate-500 font-mono">
+                {monthNames[selectedMonth - 1]} {selectedYear}
+              </span>
+            </div>
+            <h3 className="font-bold text-base text-slate-900 mt-1 flex items-center gap-2">
+              <Layers className="w-4 h-4 text-amber-600" />
+              <span>Work Categories & Complaint Count Summary</span>
+            </h3>
+            <p className="text-xs text-slate-500">
+              Complaints received, resolution rate, and manpower capacity across Mason, Carpentry, and Welding.
+            </p>
+          </div>
+
+          <button
+            onClick={handleExportCategoryComplaintsCSV}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-xs transition cursor-pointer self-start sm:self-auto"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>Download Category Report (CSV)</span>
+          </button>
+        </div>
+
+        {/* Categories Breakdown Table */}
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase font-bold text-[10px]">
+              <tr>
+                <th className="py-2.5 px-3">S.No</th>
+                <th className="py-2.5 px-3">Work Category</th>
+                <th className="py-2.5 px-3 text-center">Total Complaints</th>
+                <th className="py-2.5 px-3 text-center">Pending</th>
+                <th className="py-2.5 px-3 text-center">In Progress</th>
+                <th className="py-2.5 px-3 text-center">Resolved</th>
+                <th className="py-2.5 px-3">Resolution %</th>
+                <th className="py-2.5 px-3 text-center">Assigned Labours</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {categoryComplaintBreakdown.map((item, idx) => (
+                <tr key={item.category.id} className="hover:bg-slate-50/80">
+                  <td className="py-2.5 px-3 font-mono font-bold text-slate-500">{idx + 1}</td>
+                  <td className="py-2.5 px-3 font-bold text-slate-900">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="w-2.5 h-2.5 rounded-full"
+                        style={{ backgroundColor: item.category.color }}
+                      />
+                      <span>{item.category.name}</span>
+                    </div>
+                  </td>
+                  <td className="py-2.5 px-3 text-center font-mono font-black text-slate-900">
+                    {item.total}
+                  </td>
+                  <td className="py-2.5 px-3 text-center font-bold text-rose-700">
+                    {item.pending}
+                  </td>
+                  <td className="py-2.5 px-3 text-center font-bold text-amber-700">
+                    {item.inProgress}
+                  </td>
+                  <td className="py-2.5 px-3 text-center font-bold text-emerald-700">
+                    {item.resolved}
+                  </td>
+                  <td className="py-2.5 px-3 min-w-[120px]">
+                    <div className="flex items-center gap-2">
+                      <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden border border-slate-200">
+                        <div
+                          className="h-2 rounded-full transition-all duration-500"
+                          style={{
+                            width: `${Math.max(item.resolutionRate, item.total === 0 ? 100 : 5)}%`,
+                            backgroundColor: item.category.color,
+                          }}
+                        />
+                      </div>
+                      <span className="font-mono text-[10px] font-bold text-slate-700 shrink-0">
+                        {item.resolutionRate}%
+                      </span>
+                    </div>
+                  </td>
+                  <td className="py-2.5 px-3 text-center font-mono text-slate-700">
+                    {item.assignedLabours}
+                  </td>
+                </tr>
+              ))}
+              <tr className="bg-slate-50 font-black text-slate-900 border-t-2 border-slate-200">
+                <td className="py-2.5 px-3 font-mono">TOTAL</td>
+                <td className="py-2.5 px-3 uppercase text-[11px]">All 3 Trades</td>
+                <td className="py-2.5 px-3 text-center font-mono">{totalMonthComplaints}</td>
+                <td className="py-2.5 px-3 text-center font-mono text-rose-700">{totalMonthPending}</td>
+                <td className="py-2.5 px-3 text-center font-mono text-amber-700">
+                  {categoryComplaintBreakdown.reduce((s, c) => s + c.inProgress, 0)}
+                </td>
+                <td className="py-2.5 px-3 text-center font-mono text-emerald-700">{totalMonthResolved}</td>
+                <td className="py-2.5 px-3 font-mono text-[#1b7a54]">
+                  {totalMonthComplaints > 0 ? Math.round((totalMonthResolved / totalMonthComplaints) * 100) : 100}%
+                </td>
+                <td className="py-2.5 px-3 text-center font-mono">{workers.length}</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
 

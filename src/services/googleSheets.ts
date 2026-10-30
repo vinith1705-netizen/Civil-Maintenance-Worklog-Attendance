@@ -425,8 +425,8 @@ export const batchUpdateWorklogToSheet = async (
       sNo,
       formatWorkerName(r.workerName),
       formatTradeCategory(r.designation, r.workCategory),
-      r.workDetailsFN || 'General civil maintenance work',
-      r.workDetailsAN || 'General civil maintenance work',
+      r.workDetailsFN || '',
+      r.workDetailsAN || '',
       savedTime,
     ];
   });

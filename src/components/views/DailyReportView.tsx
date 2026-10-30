@@ -73,30 +73,26 @@ export const DailyReportView: React.FC = () => {
     return Object.entries(map);
   }, [dayRecords]);
 
-  // Specific Trade filters for sections 5 through 10
-  const filterByTrade = (keyword: string) => {
-    return dayRecords.filter((r) => {
-      const matchCat = r.workCategory?.toLowerCase().includes(keyword.toLowerCase());
-      const matchDes = r.designation?.toLowerCase().includes(keyword.toLowerCase());
-      const matchFN = r.workDetailsFN?.toLowerCase().includes(keyword.toLowerCase());
-      const matchAN = r.workDetailsAN?.toLowerCase().includes(keyword.toLowerCase());
-      return matchCat || matchDes || matchFN || matchAN;
-    });
-  };
+  // Trade categorization strictly aligned to the 3 permitted trade categories
+  const masonRecords = dayRecords.filter((r) => {
+    const cat = (r.workCategory || '').toLowerCase();
+    const des = (r.designation || '').toLowerCase();
+    if (cat.includes('carpent') || des.includes('carpent') || des.includes('polish')) return false;
+    if (cat.includes('weld') || des.includes('weld')) return false;
+    return true; // Masons, Tiles Masons, Helpers, and general civil masonry
+  });
 
-  const masonRecords = filterByTrade('mason');
-  const carpenterRecords = filterByTrade('carpent');
-  const paintingRecords = filterByTrade('paint').concat(filterByTrade('polish'));
-  const weldingRecords = filterByTrade('weld');
-  const scaffoldingRecords = filterByTrade('scaffold');
-  const specificTradeIds = new Set([
-    ...masonRecords.map((r) => r.id),
-    ...carpenterRecords.map((r) => r.id),
-    ...paintingRecords.map((r) => r.id),
-    ...weldingRecords.map((r) => r.id),
-    ...scaffoldingRecords.map((r) => r.id),
-  ]);
-  const otherRecords = dayRecords.filter((r) => !specificTradeIds.has(r.id));
+  const carpenterRecords = dayRecords.filter((r) => {
+    const cat = (r.workCategory || '').toLowerCase();
+    const des = (r.designation || '').toLowerCase();
+    return cat.includes('carpent') || des.includes('carpent') || des.includes('polish');
+  });
+
+  const weldingRecords = dayRecords.filter((r) => {
+    const cat = (r.workCategory || '').toLowerCase();
+    const des = (r.designation || '').toLowerCase();
+    return cat.includes('weld') || des.includes('weld');
+  });
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto animate-in fade-in duration-300">
@@ -290,14 +286,11 @@ export const DailyReportView: React.FC = () => {
           </div>
         </section>
 
-        {/* SECTIONS 5 - 10: SPECIFIC TRADES BREAKDOWN */}
+        {/* SECTIONS 5 - 7: SPECIFIC TRADES BREAKDOWN (Mason, Carpentry, Welding) */}
         {[
           { num: 5, title: 'Mason Work', list: masonRecords },
-          { num: 6, title: 'Carpenter Work', list: carpenterRecords },
-          { num: 7, title: 'Painting Work', list: paintingRecords },
-          { num: 8, title: 'Welding Work', list: weldingRecords },
-          { num: 9, title: 'Scaffolding Work', list: scaffoldingRecords },
-          { num: 10, title: 'Other Works (Civil / Material Shifting / Cleaning)', list: otherRecords },
+          { num: 6, title: 'Carpentry Work', list: carpenterRecords },
+          { num: 7, title: 'Welding Work', list: weldingRecords },
         ].map((sec) => (
           <section key={sec.num} className="space-y-2">
             <div className="flex items-center justify-between border-b border-slate-300 pb-1">
@@ -323,8 +316,8 @@ export const DailyReportView: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
-                  {sec.list.map((r) => (
-                    <tr key={r.id}>
+                  {sec.list.map((r, rIdx) => (
+                    <tr key={`${r.id || r.staffId}-${sec.num}-${rIdx}`}>
                       <td className="py-1.5 px-3 border-r border-slate-200 font-semibold whitespace-nowrap">
                         {r.workerName} ({r.staffId})
                       </td>

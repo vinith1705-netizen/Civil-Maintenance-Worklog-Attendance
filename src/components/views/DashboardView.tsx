@@ -92,15 +92,31 @@ export const DashboardView: React.FC = () => {
     return Math.max(matchedCategory?.complaintCount || 0, fromList);
   };
 
-  const masonCount = getCategoryCount('mason');
-  const carpenterCount = getCategoryCount('carpent');
-  const painterCount = getCategoryCount('paint') + getCategoryCount('polish');
-  const weldingCount = getCategoryCount('weld');
-  const scaffoldingCount = getCategoryCount('scaffold');
-  const otherCount = Math.max(
-    0,
-    presentCount - (masonCount + carpenterCount + painterCount + weldingCount + scaffoldingCount)
-  );
+  const masonCount = todayAttendance.filter((a) => {
+    const cat = (a.workCategory || '').toLowerCase();
+    const des = (a.designation || '').toLowerCase();
+    if (cat.includes('carpent') || des.includes('carpent') || des.includes('polish')) return false;
+    if (cat.includes('weld') || des.includes('weld')) return false;
+    return a.attendanceFN === 'Present' || a.attendanceAN === 'Present';
+  }).length;
+
+  const carpenterCount = todayAttendance.filter((a) => {
+    const cat = (a.workCategory || '').toLowerCase();
+    const des = (a.designation || '').toLowerCase();
+    return (
+      (cat.includes('carpent') || des.includes('carpent') || des.includes('polish')) &&
+      (a.attendanceFN === 'Present' || a.attendanceAN === 'Present')
+    );
+  }).length;
+
+  const weldingCount = todayAttendance.filter((a) => {
+    const cat = (a.workCategory || '').toLowerCase();
+    const des = (a.designation || '').toLowerCase();
+    return (
+      (cat.includes('weld') || des.includes('weld')) &&
+      (a.attendanceFN === 'Present' || a.attendanceAN === 'Present')
+    );
+  }).length;
 
   // Location wise summary
   const locationBreakdown = useMemo(() => {
@@ -241,130 +257,103 @@ export const DashboardView: React.FC = () => {
           </div>
           <div className="text-[10px] text-slate-500 mt-1">Active hostels & sheds</div>
         </div>
+      </div>
 
-        {/* 7. Mason Work */}
-        <div
-          onClick={() => setActiveTab('categories')}
-          className="bg-white p-3.5 rounded-2xl border border-orange-200 shadow-xs cursor-pointer hover:bg-orange-50/30 transition group"
-        >
-          <div className="flex items-center justify-between text-orange-700 mb-1">
-            <span className="text-[11px] font-bold uppercase">Mason Work</span>
-            <Hammer className="w-4 h-4 text-orange-600 group-hover:scale-110 transition" />
+      {/* 3 Dedicated Civil Work Categories Section */}
+      <div className="space-y-2.5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-500" />
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+              Civil Trade Categories (Mason Work • Carpentry Work • Welding Work)
+            </h3>
           </div>
-          <div className="flex items-baseline justify-between">
-            <div className="text-2xl font-extrabold text-orange-800">{masonCount}</div>
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-orange-100 text-orange-800">
-              {getCategoryComplaintCount('mason')} Complaints
-            </span>
-          </div>
-          <div className="text-[10px] text-orange-600 mt-1 flex items-center justify-between">
-            <span>Plaster & brickwork</span>
-            <ChevronRight className="w-3 h-3" />
-          </div>
+          <button
+            onClick={() => setActiveTab('categories')}
+            className="text-[11px] font-bold text-emerald-800 hover:text-emerald-900 flex items-center gap-1 cursor-pointer"
+          >
+            <span>View Categories & Complaints Registry</span>
+            <ArrowUpRight className="w-3.5 h-3.5" />
+          </button>
         </div>
 
-        {/* 8. Carpenter Work */}
-        <div
-          onClick={() => setActiveTab('categories')}
-          className="bg-white p-3.5 rounded-2xl border border-lime-200 shadow-xs bg-lime-50/20 cursor-pointer hover:bg-lime-50/50 transition group"
-        >
-          <div className="flex items-center justify-between text-lime-800 mb-1">
-            <span className="text-[11px] font-bold uppercase">Carpenter</span>
-            <Wrench className="w-4 h-4 text-lime-600 group-hover:scale-110 transition" />
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+          {/* 1. Mason Work */}
+          <div
+            onClick={() => setActiveTab('categories')}
+            className="bg-white p-4 rounded-2xl border border-orange-200/90 shadow-xs cursor-pointer hover:border-orange-400 hover:shadow-md transition group bg-gradient-to-br from-white to-orange-50/30"
+          >
+            <div className="flex items-center justify-between text-orange-800 mb-2">
+              <span className="text-xs font-extrabold uppercase tracking-wide">Mason Work</span>
+              <div className="w-8 h-8 rounded-xl bg-orange-100 flex items-center justify-center text-orange-600 group-hover:scale-110 transition">
+                <Hammer className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="flex items-baseline justify-between mt-2">
+              <div className="text-3xl font-black text-orange-950">{masonCount}</div>
+              <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-orange-100 text-orange-800 border border-orange-200">
+                {getCategoryComplaintCount('mason')} Complaints
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-600 mt-2 font-medium">
+              Brickwork, plastering, tile laying, foundation work, stone cutting, and mortar curing.
+            </p>
+            <div className="text-[10px] text-orange-700 font-bold mt-2.5 flex items-center justify-between pt-2 border-t border-orange-100">
+              <span>View trade roster & complaints</span>
+              <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition" />
+            </div>
           </div>
-          <div className="flex items-baseline justify-between">
-            <div className="text-2xl font-extrabold text-lime-800">{carpenterCount}</div>
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-lime-100 text-lime-800">
-              {getCategoryComplaintCount('carpent')} Complaints
-            </span>
-          </div>
-          <div className="text-[10px] text-lime-600 mt-1 flex items-center justify-between">
-            <span>Doors & furniture</span>
-            <ChevronRight className="w-3 h-3" />
-          </div>
-        </div>
 
-        {/* 9. Painter Work */}
-        <div
-          onClick={() => setActiveTab('categories')}
-          className="bg-white p-3.5 rounded-2xl border border-cyan-200 shadow-xs bg-cyan-50/20 cursor-pointer hover:bg-cyan-50/50 transition group"
-        >
-          <div className="flex items-center justify-between text-cyan-800 mb-1">
-            <span className="text-[11px] font-bold uppercase">Painter / Polish</span>
-            <Paintbrush className="w-4 h-4 text-cyan-600 group-hover:scale-110 transition" />
+          {/* 2. Carpentry Work */}
+          <div
+            onClick={() => setActiveTab('categories')}
+            className="bg-white p-4 rounded-2xl border border-lime-200/90 shadow-xs cursor-pointer hover:border-lime-400 hover:shadow-md transition group bg-gradient-to-br from-white to-lime-50/30"
+          >
+            <div className="flex items-center justify-between text-lime-900 mb-2">
+              <span className="text-xs font-extrabold uppercase tracking-wide">Carpentry Work</span>
+              <div className="w-8 h-8 rounded-xl bg-lime-100 flex items-center justify-center text-lime-700 group-hover:scale-110 transition">
+                <Wrench className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="flex items-baseline justify-between mt-2">
+              <div className="text-3xl font-black text-lime-950">{carpenterCount}</div>
+              <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-lime-100 text-lime-800 border border-lime-200">
+                {getCategoryComplaintCount('carpent')} Complaints
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-600 mt-2 font-medium">
+              Doors, windows, furniture repair, partition framing, wood polishing, and formwork.
+            </p>
+            <div className="text-[10px] text-lime-800 font-bold mt-2.5 flex items-center justify-between pt-2 border-t border-lime-100">
+              <span>View trade roster & complaints</span>
+              <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition" />
+            </div>
           </div>
-          <div className="flex items-baseline justify-between">
-            <div className="text-2xl font-extrabold text-cyan-800">{painterCount}</div>
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-cyan-100 text-cyan-800">
-              {getCategoryComplaintCount('paint')} Complaints
-            </span>
-          </div>
-          <div className="text-[10px] text-cyan-600 mt-1 flex items-center justify-between">
-            <span>Touchups & coats</span>
-            <ChevronRight className="w-3 h-3" />
-          </div>
-        </div>
 
-        {/* 10. Welding Work */}
-        <div
-          onClick={() => setActiveTab('categories')}
-          className="bg-white p-3.5 rounded-2xl border border-red-200 shadow-xs bg-red-50/20 cursor-pointer hover:bg-red-50/50 transition group"
-        >
-          <div className="flex items-center justify-between text-red-800 mb-1">
-            <span className="text-[11px] font-bold uppercase">Welding</span>
-            <Flame className="w-4 h-4 text-red-600 group-hover:scale-110 transition" />
-          </div>
-          <div className="flex items-baseline justify-between">
-            <div className="text-2xl font-extrabold text-red-800">{weldingCount}</div>
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-red-100 text-red-800">
-              {getCategoryComplaintCount('weld')} Complaints
-            </span>
-          </div>
-          <div className="text-[10px] text-red-600 mt-1 flex items-center justify-between">
-            <span>Grill & trench works</span>
-            <ChevronRight className="w-3 h-3" />
-          </div>
-        </div>
-
-        {/* 11. Scaffolding Work */}
-        <div
-          onClick={() => setActiveTab('categories')}
-          className="bg-white p-3.5 rounded-2xl border border-purple-200 shadow-xs bg-purple-50/20 cursor-pointer hover:bg-purple-50/50 transition group"
-        >
-          <div className="flex items-center justify-between text-purple-800 mb-1">
-            <span className="text-[11px] font-bold uppercase">Scaffolding</span>
-            <Layers className="w-4 h-4 text-purple-600 group-hover:scale-110 transition" />
-          </div>
-          <div className="flex items-baseline justify-between">
-            <div className="text-2xl font-extrabold text-purple-800">{scaffoldingCount}</div>
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-purple-100 text-purple-800">
-              {getCategoryComplaintCount('scaffold')} Complaints
-            </span>
-          </div>
-          <div className="text-[10px] text-purple-600 mt-1 flex items-center justify-between">
-            <span>Staging & platforms</span>
-            <ChevronRight className="w-3 h-3" />
-          </div>
-        </div>
-
-        {/* 12. Other Works */}
-        <div
-          onClick={() => setActiveTab('categories')}
-          className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs cursor-pointer hover:bg-slate-50 transition group"
-        >
-          <div className="flex items-center justify-between text-slate-500 mb-1">
-            <span className="text-[11px] font-bold uppercase">Other Trades</span>
-            <Briefcase className="w-4 h-4 text-slate-600 group-hover:scale-110 transition" />
-          </div>
-          <div className="flex items-baseline justify-between">
-            <div className="text-2xl font-extrabold text-slate-800">{otherCount}</div>
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700">
-              {getCategoryComplaintCount('plumb') + getCategoryComplaintCount('civil')} Complaints
-            </span>
-          </div>
-          <div className="text-[10px] text-slate-500 mt-1 flex items-center justify-between">
-            <span>Plumbing & upkeep</span>
-            <ChevronRight className="w-3 h-3" />
+          {/* 3. Welding Work */}
+          <div
+            onClick={() => setActiveTab('categories')}
+            className="bg-white p-4 rounded-2xl border border-red-200/90 shadow-xs cursor-pointer hover:border-red-400 hover:shadow-md transition group bg-gradient-to-br from-white to-red-50/30"
+          >
+            <div className="flex items-center justify-between text-red-900 mb-2">
+              <span className="text-xs font-extrabold uppercase tracking-wide">Welding Work</span>
+              <div className="w-8 h-8 rounded-xl bg-red-100 flex items-center justify-center text-red-600 group-hover:scale-110 transition">
+                <Flame className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="flex items-baseline justify-between mt-2">
+              <div className="text-3xl font-black text-red-950">{weldingCount}</div>
+              <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-red-100 text-red-800 border border-red-200">
+                {getCategoryComplaintCount('weld')} Complaints
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-600 mt-2 font-medium">
+              Grill repair, gate welding, steel fabrication, trench gratings, and handrail works.
+            </p>
+            <div className="text-[10px] text-red-700 font-bold mt-2.5 flex items-center justify-between pt-2 border-t border-red-100">
+              <span>View trade roster & complaints</span>
+              <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition" />
+            </div>
           </div>
         </div>
       </div>

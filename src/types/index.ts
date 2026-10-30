@@ -3,13 +3,21 @@ export type WorkerStatus = 'Active' | 'Inactive';
 export type WorklogStatus = 'Completed' | 'In Progress' | 'Pending';
 export type RecordApprovalStatus = 'Approved' | 'Draft' | 'Flagged';
 
+export const ALLOWED_WORK_CATEGORIES = [
+  'Mason Work',
+  'Carpentry Work',
+  'Welding Work',
+] as const;
+
+export type AllowedWorkCategory = (typeof ALLOWED_WORK_CATEGORIES)[number];
+
 export interface WorkerRecord {
   id: string; // Unique ID
   eId: string; // E.ID
   staffId: string; // Staff ID (e.g. CM41001)
   name: string; // Worker Name
   designation: string; // e.g. Mason, Tiles Mason, Carpentry, Welder, Helper
-  category: string; // Mason, Carpentry, Welder, Helper, etc.
+  category: AllowedWorkCategory | string; // Mason Work, Carpentry Work, Welding Work
   perDayWage: number; // e.g. 850
   status: WorkerStatus;
   joiningDate: string; // YYYY-MM-DD

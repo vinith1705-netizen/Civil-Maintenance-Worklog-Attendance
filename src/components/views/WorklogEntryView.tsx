@@ -18,6 +18,10 @@ import {
   UserX,
   HelpCircle,
   Trash2,
+  ExternalLink,
+  Download,
+  LayoutGrid,
+  Table as TableIcon,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { getTodayDateString } from '../../data/seedData';
@@ -53,7 +57,8 @@ export const WorklogEntryView: React.FC = () => {
   const [date, setDate] = useState<string>(workflowDate || getTodayDateString());
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [filterDesignation, setFilterDesignation] = useState<string>('All');
-  const [filterAttendance, setFilterAttendance] = useState<'All' | 'Present' | 'Pending'>('All');
+  const [filterAttendance, setFilterAttendance] = useState<'Present' | 'All' | 'Pending'>('Present');
+  const [viewMode, setViewMode] = useState<'cards' | 'sheet'>('cards');
   const [isBulkSyncing, setIsBulkSyncing] = useState<boolean>(false);
 
   // Maintain local state for each worker's FN and AN work
@@ -311,7 +316,7 @@ export const WorklogEntryView: React.FC = () => {
     }
   };
 
-  // Save / Sync all entries to Google Sheets
+  // Save / Sync all entries to Google Sheets (Only Present Labours)
   const handleSyncAllToGoogleSheets = async () => {
     if (!settings.spreadsheetId || !accessToken) {
       showToast('warning', 'Please connect your Google Sheet in Settings to sync.');
@@ -323,10 +328,14 @@ export const WorklogEntryView: React.FC = () => {
     try {
       const recordsToSync: any[] = [];
       for (const worker of workers) {
+        const existingAtt = attendance.find((a) => a.date === date && a.staffId === worker.staffId);
+        const isPresent = existingAtt && (existingAtt.attendanceFN === 'Present' || existingAtt.attendanceAN === 'Present');
         const entry = entries[worker.staffId];
         const fn = entry?.fnWork || '';
         const an = entry?.anWork || '';
-        const existingAtt = attendance.find((a) => a.date === date && a.staffId === worker.staffId);
+
+        // Exclude absent workers from the Worklog tab (Only present workers get daily worklog entries)
+        if (!isPresent) continue;
 
         recordsToSync.push({
           id: existingAtt?.id || `CMWL-${date.replace(/-/g, '')}-${worker.staffId}`,
@@ -337,11 +346,16 @@ export const WorklogEntryView: React.FC = () => {
           workCategory: worker.category || 'Civil Maintenance',
           workDetailsFN: fn || '',
           workDetailsAN: an || '',
-          attendanceFN: existingAtt?.attendanceFN || (fn ? 'Present' : 'Absent'),
-          attendanceAN: existingAtt?.attendanceAN || (an ? 'Present' : 'Absent'),
+          attendanceFN: existingAtt?.attendanceFN || 'Present',
+          attendanceAN: existingAtt?.attendanceAN || 'Present',
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         });
+      }
+
+      if (recordsToSync.length === 0) {
+        showToast('warning', `No labours marked 'Present' found for ${date}. Complete Step 1 Attendance roll call first.`);
+        return;
       }
 
       const res = await batchUpdateWorklogToSheet(
@@ -361,6 +375,38 @@ export const WorklogEntryView: React.FC = () => {
     } finally {
       setIsBulkSyncing(false);
     }
+  };
+
+  // Download / Export Daily Worklog matching exact Google Sheet format
+  const handleExportDailyWorklogCSV = () => {
+    const headers = ['Date', 'S.No', 'Worker Name', 'Category', 'FN Work', 'AN Work', 'Saved Time'];
+    const sNoMap = new Map<string, number>();
+    workers.forEach((w, idx) => sNoMap.set(w.staffId.toLowerCase(), idx + 1));
+    const nowStr = new Date().toLocaleDateString('en-US');
+
+    const rows = filteredWorkers.map((w, idx) => {
+      const entry = entries[w.staffId];
+      const sNo = sNoMap.get(w.staffId.toLowerCase()) || idx + 1;
+      return [
+        date,
+        sNo,
+        `"${w.name}"`,
+        `"${w.category || w.designation || 'Civil Maintenance'}"`,
+        `"${(entry?.fnWork || '').replace(/"/g, '""')}"`,
+        `"${(entry?.anWork || '').replace(/"/g, '""')}"`,
+        `"${nowStr}"`,
+      ];
+    });
+
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `BIT_Civil_Worklog_Daily_${date}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast('success', `Exported daily worklog for ${rows.length} labours.`);
   };
 
   // Helper to determine attendance badge & status for a worker
@@ -442,6 +488,7 @@ export const WorklogEntryView: React.FC = () => {
 
       const matchDesig =
         filterDesignation === 'All' ||
+        w.category?.toLowerCase() === filterDesignation.toLowerCase() ||
         w.designation.toLowerCase().includes(filterDesignation.toLowerCase());
 
       if (filterAttendance === 'Present') {
@@ -491,16 +538,46 @@ export const WorklogEntryView: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-500 font-medium">Work Log Date:</span>
-            <div className="flex items-center gap-1.5 bg-slate-100 px-3 py-1 rounded-xl border border-slate-200 text-xs font-semibold text-slate-900">
-              <Calendar className="w-3.5 h-3.5 text-teal-700" />
-              <input
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                className="bg-transparent focus:outline-none cursor-pointer"
-              />
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            {/* VIEW MODE SWITCHER: Cards vs Google Sheet Daily View */}
+            <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
+              <button
+                type="button"
+                onClick={() => setViewMode('cards')}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                  viewMode === 'cards'
+                    ? 'bg-teal-700 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <LayoutGrid className="w-3.5 h-3.5" />
+                <span>Cards View</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('sheet')}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                  viewMode === 'sheet'
+                    ? 'bg-emerald-700 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5" />
+                <span>Google Sheet Daily View</span>
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-500 font-medium">Work Log Date:</span>
+              <div className="flex items-center gap-1.5 bg-slate-100 px-3 py-1 rounded-xl border border-slate-200 text-xs font-semibold text-slate-900">
+                <Calendar className="w-3.5 h-3.5 text-teal-700" />
+                <input
+                  type="date"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                  className="bg-transparent focus:outline-none cursor-pointer"
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -523,14 +600,12 @@ export const WorklogEntryView: React.FC = () => {
           <select
             value={filterDesignation}
             onChange={(e) => setFilterDesignation(e.target.value)}
-            className="px-3 py-1.5 text-xs rounded-xl border border-slate-300 bg-white font-medium text-slate-800"
+            className="px-3 py-1.5 text-xs rounded-xl border border-slate-300 bg-white font-medium text-slate-800 cursor-pointer"
           >
-            <option value="All">All Trades ({workers.length})</option>
-            <option value="Mason">Masons</option>
-            <option value="Carpent">Carpenters</option>
-            <option value="Welder">Welders</option>
-            <option value="Helper">Helpers</option>
-            <option value="Polish">Polishers</option>
+            <option value="All">All Categories ({workers.length})</option>
+            <option value="Mason Work">Mason Work</option>
+            <option value="Carpentry Work">Carpentry Work</option>
+            <option value="Welding Work">Welding Work</option>
           </select>
 
           <select
@@ -563,8 +638,249 @@ export const WorklogEntryView: React.FC = () => {
         </div>
       </div>
 
-      {/* FAST ENTRY BANNER */}
-      <div className="bg-teal-50/90 border border-teal-200/90 rounded-2xl p-3 px-4 flex flex-wrap items-center justify-between gap-3 text-xs shadow-2xs">
+      {viewMode === 'sheet' ? (
+        <div className="space-y-4 animate-in fade-in duration-200">
+          {/* GOOGLE SHEET WORKLOG BANNER */}
+          <div className="bg-gradient-to-r from-emerald-900 via-emerald-800 to-teal-900 text-white rounded-2xl p-4 md:p-5 shadow-lg border border-emerald-700 space-y-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center text-emerald-300 shrink-0 border border-white/20">
+                  <FileSpreadsheet className="w-6 h-6 text-emerald-300" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 text-[10px] font-bold uppercase tracking-wider font-mono">
+                      Google Sheet • Tab: {settings.worklogSheetName || 'Worklog'}
+                    </span>
+                    <span className="text-xs text-emerald-200 font-medium">Daily Muster Entry</span>
+                  </div>
+                  <h2 className="text-base sm:text-lg font-bold tracking-tight text-white mt-0.5">
+                    Daily Worklog Entries for {date}
+                  </h2>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {settings.spreadsheetUrl && (
+                  <a
+                    href={settings.spreadsheetUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold border border-white/20 transition cursor-pointer"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5 text-emerald-300" />
+                    <span>Open in Google Sheets</span>
+                  </a>
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleExportDailyWorklogCSV}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold border border-white/20 transition cursor-pointer"
+                  title="Download matching 7-column CSV for offline backup"
+                >
+                  <Download className="w-3.5 h-3.5 text-emerald-300" />
+                  <span>Export CSV</span>
+                </button>
+
+                {settings.spreadsheetId && accessToken ? (
+                  <button
+                    type="button"
+                    onClick={handleSyncAllToGoogleSheets}
+                    disabled={isBulkSyncing}
+                    className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-emerald-950 text-xs font-extrabold shadow-md shadow-emerald-500/30 transition cursor-pointer disabled:opacity-50"
+                  >
+                    <FileSpreadsheet className="w-3.5 h-3.5" />
+                    <span>{isBulkSyncing ? 'Syncing...' : 'Sync to Google Sheet'}</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('settings')}
+                    className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition cursor-pointer"
+                  >
+                    <span>Connect Sheet in Settings</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="bg-emerald-950/60 rounded-xl p-2.5 px-3 border border-emerald-800/80 flex flex-wrap items-center justify-between text-[11px] text-emerald-200 gap-2">
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-emerald-400 font-bold">Exact Schema:</span>
+                <span className="font-medium text-emerald-100">
+                  Date | S.No | Worker Name | Category | FN Work | AN Work | Saved Time
+                </span>
+              </div>
+              <div className="flex items-center gap-3">
+                <span>
+                  Showing <strong className="text-white font-bold">{filteredWorkers.length}</strong> labours ({filterAttendance} only)
+                </span>
+                <span>•</span>
+                <span>
+                  <strong className="text-emerald-300 font-bold">{totalLoggedCount}</strong> with work logged
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* GOOGLE SHEET TABULAR VIEW */}
+          {filteredWorkers.length === 0 ? (
+            <div className="bg-white rounded-2xl border-2 border-dashed border-slate-300 p-8 text-center space-y-3">
+              <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
+                <AlertCircle className="w-6 h-6" />
+              </div>
+              <h3 className="text-sm font-bold text-slate-800">No labours found matching your filter</h3>
+              <p className="text-xs text-slate-500 max-w-md mx-auto">
+                {filterAttendance === 'Present'
+                  ? `No workers are marked 'Present' for ${date}. In Step 1 Attendance Roll Call, mark present labours to log their work.`
+                  : 'Try clearing the search query or changing trade filter to see labours.'}
+              </p>
+              <div className="flex items-center justify-center gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFilterAttendance('All');
+                    setSearchQuery('');
+                    setFilterDesignation('All');
+                  }}
+                  className="px-3.5 py-1.5 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold shadow-xs transition cursor-pointer"
+                >
+                  Show All Workers ({workers.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setWorkflowDate(date);
+                    setActiveTab('attendance_entry');
+                  }}
+                  className="px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition cursor-pointer"
+                >
+                  Go to Step 1: Roll Call
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-emerald-50/90 border-b border-emerald-200 text-emerald-950 font-bold text-[11px] uppercase tracking-wider">
+                      <th className="py-2.5 px-3 border-r border-emerald-200 whitespace-nowrap w-24">Date</th>
+                      <th className="py-2.5 px-2 border-r border-emerald-200 text-center whitespace-nowrap w-12">S.No</th>
+                      <th className="py-2.5 px-3 border-r border-emerald-200 whitespace-nowrap min-w-[200px]">Worker Name</th>
+                      <th className="py-2.5 px-3 border-r border-emerald-200 whitespace-nowrap min-w-[130px]">Category</th>
+                      <th className="py-2.5 px-3 border-r border-emerald-200 min-w-[280px]">Forenoon Work (FN)</th>
+                      <th className="py-2.5 px-3 border-r border-emerald-200 min-w-[280px]">Afternoon Work (AN)</th>
+                      <th className="py-2.5 px-3 border-r border-emerald-200 whitespace-nowrap w-28">Saved Time</th>
+                      <th className="py-2.5 px-2 text-center whitespace-nowrap w-16">Quick</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {filteredWorkers.map((worker, idx) => {
+                      const entry = entries[worker.staffId] || {
+                        worker,
+                        fnWork: '',
+                        anWork: '',
+                        autoSaved: false,
+                        isSaving: false,
+                        isImprovingFN: false,
+                        isImprovingAN: false,
+                      };
+                      const sNo = workers.findIndex((w) => w.staffId === worker.staffId) + 1;
+                      const savedTimeStr = entry.lastSavedAt || new Date().toLocaleDateString('en-US');
+
+                      return (
+                        <tr
+                          key={`${worker.staffId || worker.id}-sheet-${idx}`}
+                          className="hover:bg-emerald-50/30 transition group"
+                        >
+                          <td className="py-2 px-3 border-r border-slate-200 font-mono text-[11px] text-slate-700 whitespace-nowrap">
+                            {date}
+                          </td>
+                          <td className="py-2 px-2 border-r border-slate-200 text-center font-mono font-bold text-slate-800 text-[11px]">
+                            {sNo}
+                          </td>
+                          <td className="py-2 px-3 border-r border-slate-200">
+                            <div className="font-bold text-slate-900 leading-tight">{worker.name}</div>
+                            <div className="font-mono text-[10px] text-slate-500">{worker.staffId}</div>
+                          </td>
+                          <td className="py-2 px-3 border-r border-slate-200 font-medium text-slate-700 whitespace-nowrap">
+                            <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-800 border border-slate-200 text-[11px]">
+                              {worker.category || worker.designation}
+                            </span>
+                          </td>
+                          <td className="py-1.5 px-2 border-r border-slate-200">
+                            <div className="relative">
+                              <input
+                                type="text"
+                                value={entry.fnWork}
+                                onChange={(e) => handleInputChange(worker.staffId, 'fnWork', e.target.value)}
+                                placeholder="Enter FN civil tasks..."
+                                className="w-full text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white"
+                              />
+                              {entry.fnWork && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleImprove(worker.staffId, 'fnWork')}
+                                  disabled={entry.isImprovingFN}
+                                  title="AI Refine description"
+                                  className="absolute right-1.5 top-1.5 p-1 rounded hover:bg-slate-100 text-amber-600 disabled:opacity-50 cursor-pointer"
+                                >
+                                  <Sparkles className="w-3 h-3" />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-1.5 px-2 border-r border-slate-200">
+                            <div className="relative">
+                              <input
+                                type="text"
+                                value={entry.anWork}
+                                onChange={(e) => handleInputChange(worker.staffId, 'anWork', e.target.value)}
+                                placeholder="Enter AN civil tasks..."
+                                className="w-full text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white"
+                              />
+                              {entry.anWork && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleImprove(worker.staffId, 'anWork')}
+                                  disabled={entry.isImprovingAN}
+                                  title="AI Refine description"
+                                  className="absolute right-1.5 top-1.5 p-1 rounded hover:bg-slate-100 text-amber-600 disabled:opacity-50 cursor-pointer"
+                                >
+                                  <Sparkles className="w-3 h-3" />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-2 px-3 border-r border-slate-200 font-mono text-[11px] text-slate-500 whitespace-nowrap">
+                            {savedTimeStr}
+                          </td>
+                          <td className="py-2 px-2 text-center whitespace-nowrap">
+                            <button
+                              type="button"
+                              onClick={() => handleCopyFNtoAN(worker.staffId)}
+                              title="Copy FN to AN"
+                              disabled={!entry.fnWork}
+                              className="p-1 rounded-lg text-slate-400 hover:text-emerald-700 hover:bg-emerald-50 disabled:opacity-20 transition cursor-pointer"
+                            >
+                              <Copy className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <>
+          {/* FAST ENTRY BANNER */}
+          <div className="bg-teal-50/90 border border-teal-200/90 rounded-2xl p-3 px-4 flex flex-wrap items-center justify-between gap-3 text-xs shadow-2xs">
         <div className="flex items-center gap-2">
           <span className="bg-teal-800 text-white font-black px-2.5 py-1 rounded-xl text-[10px] tracking-wide uppercase shadow-xs">
             ⚡ Fast Entry
@@ -633,7 +949,7 @@ export const WorklogEntryView: React.FC = () => {
 
           return (
             <div
-              key={worker.id}
+              key={`${worker.staffId || worker.id}-${idx}`}
               className={`bg-white rounded-2xl border-2 p-4 sm:p-5 shadow-xs transition duration-200 ${
                 hasLoggedWork
                   ? 'border-teal-400 bg-teal-50/20'
@@ -900,6 +1216,8 @@ export const WorklogEntryView: React.FC = () => {
           );
         })}
       </div>
+        </>
+      )}
 
       {/* FOOTER BAR */}
       <div className="sticky bottom-4 bg-slate-900 text-white p-4 rounded-2xl shadow-2xl flex flex-col sm:flex-row items-center justify-between gap-3 border border-slate-800">

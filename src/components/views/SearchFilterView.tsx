@@ -402,8 +402,8 @@ export const SearchFilterView: React.FC = () => {
                   </td>
                 </tr>
               ) : (
-                sortedRecords.map((r) => (
-                  <tr key={r.id} className="hover:bg-slate-50/80 transition">
+                sortedRecords.map((r, rIdx) => (
+                  <tr key={`${r.id || r.staffId}-${r.date}-${rIdx}`} className="hover:bg-slate-50/80 transition">
                     <td className="py-2.5 px-3 font-mono font-semibold text-slate-700 whitespace-nowrap">
                       {r.date}
                     </td>
