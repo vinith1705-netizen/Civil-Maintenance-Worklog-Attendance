@@ -164,7 +164,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [activeTab, setActiveTab] = useState<ViewTab>('attendance_entry');
   const [workflowDate, setWorkflowDate] = useState<string>(getTodayDateString());
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [accessToken, setAccessToken] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('bit_civil_google_access_token');
+    }
+    return null;
+  });
   const [isLoggingIn, setIsLoggingIn] = useState<boolean>(false);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [isUpdatingLabour, setIsUpdatingLabour] = useState<boolean>(false);
@@ -381,17 +386,25 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   }, [settings]);
 
-  // Initialize Firebase Auth listener
+  // Initialize Firebase Auth listener with any-time persistent connection
   useEffect(() => {
     const unsubscribe = initAuth(
       (user, token) => {
         setCurrentUser(user);
-        setAccessToken(token);
-        setSyncStatus({ status: 'idle', message: 'Signed in with Google' });
+        const effectiveToken = token || (typeof window !== 'undefined' ? localStorage.getItem('bit_civil_google_access_token') : null) || '';
+        if (effectiveToken) {
+          setAccessToken(effectiveToken);
+        }
+        setSyncStatus({ status: 'idle', message: 'Google Connected' });
       },
       () => {
-        setCurrentUser(null);
-        setAccessToken(null);
+        const savedToken = typeof window !== 'undefined'
+          ? localStorage.getItem('bit_civil_google_access_token')
+          : null;
+        if (!savedToken) {
+          setCurrentUser(null);
+          setAccessToken(null);
+        }
       }
     );
     return () => unsubscribe();

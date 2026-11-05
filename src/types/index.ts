@@ -20,8 +20,8 @@ export interface WorkerRecord {
   category: AllowedWorkCategory | string; // Mason Work, Carpentry Work, Welding Work
   perDayWage: number; // e.g. 850
   status: WorkerStatus;
-  joiningDate: string; // YYYY-MM-DD
-  remarks: string;
+  joiningDate?: string; // Optional YYYY-MM-DD
+  remarks?: string; // Optional remarks
 }
 
 export interface AttendanceRecord {

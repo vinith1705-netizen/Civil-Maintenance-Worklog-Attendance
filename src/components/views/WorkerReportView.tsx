@@ -131,8 +131,6 @@ export const WorkerReportView: React.FC = () => {
                   <span>Category: <strong className="text-white">{currentWorker.category}</strong></span>
                   <span>•</span>
                   <span>Daily Base Rate: <strong className="text-amber-400 font-mono">₹{currentWorker.perDayWage}</strong></span>
-                  <span>•</span>
-                  <span>Joining Date: <strong className="text-white font-mono">{currentWorker.joiningDate}</strong></span>
                 </div>
               </div>
 

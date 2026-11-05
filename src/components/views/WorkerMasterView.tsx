@@ -53,8 +53,6 @@ export const WorkerMasterView: React.FC = () => {
   const [category, setCategory] = useState('Mason Work');
   const [perDayWage, setPerDayWage] = useState(850);
   const [status, setStatus] = useState<WorkerStatus>('Active');
-  const [joiningDate, setJoiningDate] = useState('2022-01-01');
-  const [remarks, setRemarks] = useState('');
 
   const openAddModal = () => {
     setEditingWorker(null);
@@ -67,8 +65,6 @@ export const WorkerMasterView: React.FC = () => {
     setCategory('Mason Work');
     setPerDayWage(850);
     setStatus('Active');
-    setJoiningDate(new Date().toISOString().slice(0, 10));
-    setRemarks('');
     setSyncToSheetOnSave(Boolean(settings.spreadsheetId));
     setModalOpen(true);
   };
@@ -82,8 +78,6 @@ export const WorkerMasterView: React.FC = () => {
     setCategory(w.category);
     setPerDayWage(w.perDayWage);
     setStatus(w.status);
-    setJoiningDate(w.joiningDate);
-    setRemarks(w.remarks);
     setSyncToSheetOnSave(Boolean(settings.spreadsheetId));
     setModalOpen(true);
   };
@@ -105,8 +99,6 @@ export const WorkerMasterView: React.FC = () => {
         category,
         perDayWage: Number(perDayWage),
         status,
-        joiningDate,
-        remarks,
       });
     } else {
       addWorker({
@@ -117,8 +109,6 @@ export const WorkerMasterView: React.FC = () => {
         category,
         perDayWage: Number(perDayWage),
         status,
-        joiningDate,
-        remarks,
       });
     }
 
@@ -153,7 +143,7 @@ export const WorkerMasterView: React.FC = () => {
 
   // Export to CSV
   const handleExportCSV = () => {
-    const headers = ['S.No', 'E.ID', 'Staff ID', 'Worker Name', 'Designation', 'Category', 'Per Day Wage', 'Status', 'Joining Date', 'Remarks'];
+    const headers = ['S.No', 'E.ID', 'Staff ID', 'Worker Name', 'Designation', 'Category', 'Per Day Wage', 'Status'];
     const rows = workers.map((w, i) => [
       i + 1,
       `"${w.eId}"`,
@@ -163,8 +153,6 @@ export const WorkerMasterView: React.FC = () => {
       `"${w.category}"`,
       w.perDayWage,
       w.status,
-      w.joiningDate,
-      `"${w.remarks}"`,
     ]);
 
     const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
@@ -375,8 +363,6 @@ export const WorkerMasterView: React.FC = () => {
                 <th className="py-3 px-3.5">Work Category</th>
                 <th className="py-3 px-3.5">Per Day Wage</th>
                 <th className="py-3 px-3.5">Status</th>
-                <th className="py-3 px-3.5">Joining Date</th>
-                <th className="py-3 px-3.5">Remarks</th>
                 <th className="py-3 px-3.5 text-right">Actions</th>
               </tr>
             </thead>
@@ -406,8 +392,6 @@ export const WorkerMasterView: React.FC = () => {
                       {w.status}
                     </button>
                   </td>
-                  <td className="py-2.5 px-3.5 text-slate-500 font-mono text-[11px]">{w.joiningDate}</td>
-                  <td className="py-2.5 px-3.5 text-slate-500 max-w-[160px] truncate">{w.remarks || '-'}</td>
                   <td className="py-2.5 px-3.5 text-right">
                     <button
                       onClick={() => openEditModal(w)}
@@ -521,27 +505,6 @@ export const WorkerMasterView: React.FC = () => {
                     <option value="Inactive">Inactive</option>
                   </select>
                 </div>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Joining Date</label>
-                <input
-                  type="date"
-                  value={joiningDate}
-                  onChange={(e) => setJoiningDate(e.target.value)}
-                  className="w-full p-2 border border-slate-300 rounded-xl"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Remarks</label>
-                <input
-                  type="text"
-                  value={remarks}
-                  onChange={(e) => setRemarks(e.target.value)}
-                  placeholder="Specialization, tools assigned, etc."
-                  className="w-full p-2 border border-slate-300 rounded-xl"
-                />
               </div>
 
               {settings.spreadsheetId && (

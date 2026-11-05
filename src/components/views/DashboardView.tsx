@@ -17,6 +17,8 @@ import {
   Activity,
   ArrowUpRight,
   Sparkles,
+  CalendarRange,
+  Download,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { getTodayDateString } from '../../data/seedData';
@@ -180,8 +182,17 @@ export const DashboardView: React.FC = () => {
           </div>
 
           <button
+            onClick={() => setActiveTab('monthly_report')}
+            className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold text-xs transition border border-slate-700 flex items-center gap-1.5 cursor-pointer shadow-xs"
+            title="Open Work Monthly Report & Download Options"
+          >
+            <Download className="w-3.5 h-3.5 text-amber-400" />
+            <span>Work Monthly Report</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab('attendance_entry')}
-            className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-semibold text-xs transition shadow-md shadow-amber-600/30 flex items-center gap-1.5"
+            className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-semibold text-xs transition shadow-md shadow-amber-600/30 flex items-center gap-1.5 cursor-pointer"
           >
             <span>+ Enter Attendance</span>
           </button>

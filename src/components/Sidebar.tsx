@@ -37,7 +37,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onCloseMobile }) =
     { id: 'categories', label: 'Work Categories', icon: Tag },
     
     { id: 'daily_report', label: 'Daily Report', icon: FileText, section: 'Reports & Analytics' },
-    { id: 'monthly_report', label: 'Monthly Report', icon: CalendarRange },
+    { id: 'monthly_report', label: 'Monthly Work Report', icon: CalendarRange, badge: 'Download' },
     { id: 'worker_report', label: 'Worker Report', icon: UserCheck },
     { id: 'location_report', label: 'Location Report', icon: Building },
     { id: 'mason_report', label: 'Mason Work Summary', icon: Hammer, badge: 'Key' },
