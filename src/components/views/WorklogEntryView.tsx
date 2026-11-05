@@ -596,35 +596,6 @@ export const WorklogEntryView: React.FC = () => {
         </div>
       </div>
 
-      {/* GOOGLE AUTH EXPIRED OR DISCONNECTED ALERT BANNER */}
-      {(googleAuthExpired || (!accessToken && settings.spreadsheetId)) && (
-        <div className="bg-gradient-to-r from-amber-50 via-amber-100/70 to-orange-50 border-2 border-amber-400 p-4 rounded-2xl shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in duration-200">
-          <div className="flex items-start gap-3">
-            <div className="p-2 bg-amber-500 text-white rounded-xl shadow-xs shrink-0 mt-0.5 sm:mt-0">
-              <AlertCircle className="w-5 h-5" />
-            </div>
-            <div>
-              <h4 className="text-sm font-bold text-amber-950 flex items-center gap-1.5">
-                <span>Google Sheets Session Expired — Action Required</span>
-                <span className="text-[10px] bg-amber-200 text-amber-900 px-1.5 py-0.5 rounded font-mono font-bold">
-                  Token Expired
-                </span>
-              </h4>
-              <p className="text-xs text-amber-800 mt-0.5 leading-relaxed">
-                Google OAuth tokens naturally expire after 60 minutes. Your work log entries are safely saved locally in the system, but cannot update your Google Sheet until you reconnect.
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={reconnectGoogleAndSync}
-            className="flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-700 active:scale-95 text-white font-bold text-xs rounded-xl shadow-md shadow-amber-600/30 transition shrink-0 cursor-pointer w-full sm:w-auto justify-center animate-pulse"
-          >
-            <RotateCcw className="w-4 h-4" />
-            <span>Reconnect Google & Save to Sheet</span>
-          </button>
-        </div>
-      )}
-
       {/* FILTER & QUICK SYNC BAR */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2 flex-1 min-w-[240px]">

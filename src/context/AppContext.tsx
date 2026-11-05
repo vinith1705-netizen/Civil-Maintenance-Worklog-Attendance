@@ -497,7 +497,29 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setCurrentUser(res.user);
         setAccessToken(res.accessToken);
         setGoogleAuthExpired(false);
-        showToast('success', `Signed in as ${res.user.displayName || res.user.email}. Google Sheet sync enabled.`);
+        showToast('success', 'Google Sheet connected successfully!');
+
+        // If no spreadsheet is linked yet, auto-create BIT Civil Maintenance spreadsheet seamlessly
+        if (!settings.spreadsheetId) {
+          try {
+            const created = await createNewSpreadsheet(
+              'BIT Civil Maintenance Worklog & Attendance',
+              res.accessToken,
+              workers,
+              locations
+            );
+            setSettings((prev) => ({
+              ...prev,
+              spreadsheetId: created.spreadsheetId,
+              spreadsheetUrl: created.spreadsheetUrl,
+              attendanceSheetName: 'Attendance',
+              worklogSheetName: 'Worklog',
+              workerSheetName: 'Workers',
+            }));
+          } catch (sheetErr) {
+            console.warn('Auto create sheet on login error:', sheetErr);
+          }
+        }
       }
     } catch (err: any) {
       console.error('Login error:', err);
