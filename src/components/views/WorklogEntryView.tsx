@@ -50,6 +50,8 @@ export const WorklogEntryView: React.FC = () => {
     accessToken,
     googleAuthExpired,
     reconnectGoogleAndSync,
+    handleGoogleLogin,
+    isLoggingIn,
     workflowDate,
     setWorkflowDate,
     setActiveTab,
@@ -189,7 +191,7 @@ export const WorklogEntryView: React.FC = () => {
             workDetailsAN: an,
           },
           worklogId,
-          false, // do not sync to sheet on every keystroke
+          Boolean(settings.spreadsheetId && accessToken), // Fully auto-save to Google Sheet in exact format
           isManual // show toast notification only when user manually clicked Save
         );
 
@@ -207,7 +209,12 @@ export const WorklogEntryView: React.FC = () => {
         });
 
         if (isManual) {
-          showToast('success', `Saved worklog for ${worker.name}`);
+          showToast(
+            'success',
+            settings.spreadsheetId && accessToken
+              ? `Saved & auto-synced worklog for ${worker.name} to Google Sheet!`
+              : `Saved worklog for ${worker.name}`
+          );
         }
       } catch (err: any) {
         console.error('Failed to save worklog:', err);
@@ -643,7 +650,7 @@ export const WorklogEntryView: React.FC = () => {
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
             </span>
-            <span>Full Auto-Save Active</span>
+            <span>Google Sheet Full Auto-Save Active</span>
           </div>
         </div>
       </div>
@@ -698,18 +705,26 @@ export const WorklogEntryView: React.FC = () => {
                     type="button"
                     onClick={handleSyncAllToGoogleSheets}
                     disabled={isBulkSyncing}
-                    className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-emerald-950 text-xs font-extrabold shadow-md shadow-emerald-500/30 transition cursor-pointer disabled:opacity-50"
+                    className="flex items-center gap-2 px-4 py-1.5 rounded-xl bg-emerald-400 hover:bg-emerald-300 active:scale-95 text-emerald-950 text-xs font-black shadow-md shadow-emerald-500/30 transition cursor-pointer disabled:opacity-50"
+                    title="Google Sheet Full Auto-Save is active. Click to immediately force-save all rows to Google Sheet in exact format."
                   >
-                    <FileSpreadsheet className="w-3.5 h-3.5" />
-                    <span>{isBulkSyncing ? 'Syncing...' : 'Sync to Google Sheet'}</span>
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-950 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-950"></span>
+                    </span>
+                    <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-950" />
+                    <span>{isBulkSyncing ? 'Auto-Saving...' : 'Google Sheet Full Auto-Save Active'}</span>
                   </button>
                 ) : (
                   <button
                     type="button"
-                    onClick={() => setActiveTab('settings')}
-                    className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition cursor-pointer"
+                    onClick={googleAuthExpired ? reconnectGoogleAndSync : handleGoogleLogin}
+                    disabled={isLoggingIn}
+                    className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-emerald-950 text-xs font-black shadow-md shadow-emerald-500/30 transition cursor-pointer"
+                    title="Connect Google Sheet to enable full auto-save"
                   >
-                    <span>Connect Sheet in Settings</span>
+                    <FileSpreadsheet className="w-3.5 h-3.5" />
+                    <span>{isLoggingIn ? 'Connecting...' : 'Connect Google Sheet (Auto-Save)'}</span>
                   </button>
                 )}
               </div>
@@ -718,17 +733,18 @@ export const WorklogEntryView: React.FC = () => {
             <div className="bg-emerald-950/60 rounded-xl p-2.5 px-3 border border-emerald-800/80 flex flex-wrap items-center justify-between text-[11px] text-emerald-200 gap-2">
               <div className="flex items-center gap-2">
                 <span className="font-mono text-emerald-400 font-bold">Exact Schema:</span>
-                <span className="font-medium text-emerald-100">
-                  Date | S.No | Worker Name | Category | FN Work | AN Work | Saved Time
+                <span className="font-mono text-white text-[11px]">
+                  Date | S.No | Worker Name | Category | Forenoon Work (FN) | Afternoon Work (AN) | Saved Time
                 </span>
               </div>
               <div className="flex items-center gap-3">
-                <span>
-                  Showing <strong className="text-white font-bold">{filteredWorkers.length}</strong> labours ({filterAttendance} only)
+                <span className="font-mono text-emerald-300 font-bold flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Full Auto-Save Active</span>
                 </span>
                 <span>•</span>
                 <span>
-                  <strong className="text-emerald-300 font-bold">{totalLoggedCount}</strong> with work logged
+                  Showing <strong className="text-white font-bold">{filteredWorkers.length}</strong> labours
                 </span>
               </div>
             </div>
@@ -1046,9 +1062,11 @@ export const WorklogEntryView: React.FC = () => {
                     />
                     <span className="text-xs font-semibold text-slate-700">
                       {entry.isSaving
-                        ? 'Saving...'
+                        ? 'Auto-Saving...'
                         : entry.autoSaved
-                        ? 'Auto Saved'
+                        ? settings.spreadsheetId && accessToken
+                          ? 'Auto-Saved to Sheet'
+                          : 'Auto-Saved'
                         : hasLoggedWork
                         ? 'Draft'
                         : 'Empty'}

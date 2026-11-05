@@ -340,6 +340,112 @@ export const appendWorklogToSheet = async (
 };
 
 /**
+ * Upsert single worklog row matching exact user schema:
+ * Date | S.No | Worker Name | Category | Forenoon Work (FN) | Afternoon Work (AN) | Saved Time
+ * Updates in-place if date + worker matches, otherwise appends.
+ */
+export const upsertWorklogRowToSheet = async (
+  spreadsheetId: string,
+  sheetName: string = 'Worklog',
+  record: {
+    date: string;
+    workerName: string;
+    staffId?: string;
+    designation?: string;
+    workCategory?: string;
+    workDetailsFN?: string;
+    workDetailsAN?: string;
+    workDetails?: string;
+  },
+  token: string,
+  sNo: number = 1
+): Promise<{ success: boolean; rowAction: 'updated' | 'appended'; row?: number }> => {
+  const cleanId = extractSpreadsheetId(spreadsheetId);
+  if (!cleanId) throw new Error('Spreadsheet ID required');
+
+  const targetSheetTitle = sheetName || 'Worklog';
+  const rowData = [
+    record.date,
+    sNo,
+    formatWorkerName(record.workerName),
+    formatTradeCategory(record.designation, record.workCategory),
+    record.workDetailsFN || record.workDetails || '',
+    record.workDetailsAN || record.workDetails || '',
+    getSavedDateString(),
+  ];
+
+  try {
+    // 1. Fetch existing dates & names to find existing row index
+    const checkRes = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${cleanId}/values/${encodeURIComponent(targetSheetTitle)}!A1:C100`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      }
+    );
+
+    let matchedRow = -1;
+    if (checkRes.ok) {
+      const data = await checkRes.json();
+      const rows = data.values || [];
+      const cleanTargetName = record.workerName.toLowerCase().replace(/^(mr|mrs|ms)\.?\s+/i, '').trim();
+
+      for (let i = 1; i < rows.length; i++) {
+        const rowDate = rows[i][0];
+        const rowName = (rows[i][2] || '').toLowerCase().replace(/^(mr|mrs|ms)\.?\s+/i, '').trim();
+        if (
+          rowDate === record.date &&
+          (rowName === cleanTargetName || rowName.includes(cleanTargetName) || cleanTargetName.includes(rowName))
+        ) {
+          matchedRow = i + 1; // 1-indexed row number
+          break;
+        }
+      }
+    }
+
+    if (matchedRow > 1) {
+      // Update existing row in place
+      const updateRange = `${targetSheetTitle}!A${matchedRow}:G${matchedRow}`;
+      const updateRes = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${cleanId}/values/${encodeURIComponent(updateRange)}?valueInputOption=USER_ENTERED`,
+        {
+          method: 'PUT',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ values: [rowData] }),
+        }
+      );
+      if (!updateRes.ok) {
+        await handleGoogleSheetsError(updateRes, 'update worklog row in Google Sheet');
+      }
+      return { success: true, rowAction: 'updated', row: matchedRow };
+    } else {
+      // Append new row
+      const appendRange = `${targetSheetTitle}!A:G`;
+      const appendRes = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${cleanId}/values/${encodeURIComponent(appendRange)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ values: [rowData] }),
+        }
+      );
+      if (!appendRes.ok) {
+        await handleGoogleSheetsError(appendRes, 'append worklog to Google Sheet');
+      }
+      return { success: true, rowAction: 'appended' };
+    }
+  } catch (err: any) {
+    console.error('upsertWorklogRowToSheet error:', err);
+    throw err;
+  }
+};
+
+/**
  * Batch update attendance records matching user exact schema:
  * Date | S.No | Worker Name | Category | Attendance | Locked | Saved Time
  * e.g. 2026-10-18 | 21 | Mr. KUMAR P | Carpentry | Absent | TRUE | 10/24/2026

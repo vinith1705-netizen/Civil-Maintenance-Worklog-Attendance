@@ -296,7 +296,7 @@ export const AttendanceEntryView: React.FC = () => {
         };
 
         try {
-          await saveBatchAttendanceRecords([singleRecord], false);
+          await saveBatchAttendanceRecords([singleRecord], Boolean(settings.spreadsheetId && accessToken));
         } catch (e) {
           console.warn('Auto-save attendance error:', e);
         }
@@ -509,8 +509,8 @@ export const AttendanceEntryView: React.FC = () => {
       };
     });
 
-    await saveBatchAttendanceRecords(records, false);
-    showToast('info', `Marked all labours as ${statusToSet}.`);
+    await saveBatchAttendanceRecords(records, Boolean(settings.spreadsheetId && accessToken));
+    showToast('info', `Marked all labours as ${statusToSet} (auto-saved to Google Sheet).`);
   };
 
   // Reset all labours to initial white P and A buttons (Unmarked)
@@ -678,7 +678,7 @@ export const AttendanceEntryView: React.FC = () => {
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
             </span>
-            <span>Full Auto-Save Active</span>
+            <span>Google Sheet Full Auto-Save Active</span>
           </div>
         </div>
 

@@ -37,6 +37,7 @@ import {
   importWorkersFromGoogleSheet,
   batchUpdateAttendanceToSheet,
   batchUpdateWorklogToSheet,
+  upsertWorklogRowToSheet,
   isGoogleAuthError,
   GoogleAuthExpiredError,
 } from '../services/googleSheets';
@@ -1019,7 +1020,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             w.staffId.toLowerCase() === finalRecord.staffId.toLowerCase() ||
             w.name.toLowerCase() === finalRecord.workerName.toLowerCase()
         );
-        await appendWorklogToSheet(
+        await upsertWorklogRowToSheet(
           settings.spreadsheetId,
           settings.worklogSheetName || 'Worklog',
           finalRecord,
