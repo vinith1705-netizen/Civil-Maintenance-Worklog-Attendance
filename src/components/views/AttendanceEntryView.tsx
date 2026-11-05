@@ -98,7 +98,10 @@ export const AttendanceEntryView: React.FC = () => {
     const existingMap = new Map<string, AttendanceRecord>();
     existingOnDate.forEach((a) => existingMap.set(a.staffId.toLowerCase(), a));
 
-    const rows: LabourAttendanceRow[] = workers.map((worker) => {
+    // Exclude Inactive workers from attendance entry format
+    const activeWorkers = workers.filter((worker) => worker.status === 'Active');
+
+    const rows: LabourAttendanceRow[] = activeWorkers.map((worker) => {
       const existing = existingMap.get(worker.staffId.toLowerCase());
       if (existing) {
         const isPresent = existing.attendanceFN === 'Present' || existing.attendanceAN === 'Present';
@@ -154,6 +157,9 @@ export const AttendanceEntryView: React.FC = () => {
   // Filtered rows for search/trade
   const filteredRows = useMemo(() => {
     return labourRows.filter((r) => {
+      // Inactive workers are not visible in attendance entry format
+      if (r.worker.status !== 'Active') return false;
+
       const matchSearch =
         r.worker.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         r.worker.staffId.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -692,8 +698,14 @@ export const AttendanceEntryView: React.FC = () => {
 
         {/* Live Counters with Unselected Count */}
         <div className="flex items-center gap-3 sm:gap-4 text-xs font-semibold flex-wrap">
-          <div className="text-slate-600">
-            Total: <strong className="text-slate-900 font-bold">{workers.length}</strong>
+          <div className="text-slate-600 flex items-center gap-1.5">
+            <span>Active Labours:</span>
+            <strong className="text-slate-900 font-bold">{labourRows.length}</strong>
+            {workers.filter((w) => w.status !== 'Active').length > 0 && (
+              <span className="text-[10px] text-rose-700 bg-rose-50 px-1.5 py-0.5 rounded font-medium border border-rose-200">
+                ({workers.filter((w) => w.status !== 'Active').length} Inactive Hidden)
+              </span>
+            )}
           </div>
           <div className="text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
             Unselected: <strong className="font-bold text-slate-800">{unmarkedCount}</strong>

@@ -481,6 +481,9 @@ export const WorklogEntryView: React.FC = () => {
   // Filtered workers list
   const filteredWorkers = useMemo(() => {
     return workers.filter((w) => {
+      // Exclude Inactive workers from worklog entry format
+      if (w.status !== 'Active') return false;
+
       const matchSearch =
         w.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         w.staffId.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -602,7 +605,7 @@ export const WorklogEntryView: React.FC = () => {
             onChange={(e) => setFilterDesignation(e.target.value)}
             className="px-3 py-1.5 text-xs rounded-xl border border-slate-300 bg-white font-medium text-slate-800 cursor-pointer"
           >
-            <option value="All">All Categories ({workers.length})</option>
+            <option value="All">All Categories ({workers.filter((w) => w.status === 'Active').length})</option>
             <option value="Mason Work">Mason Work</option>
             <option value="Carpentry Work">Carpentry Work</option>
             <option value="Welding Work">Welding Work</option>
@@ -613,7 +616,7 @@ export const WorklogEntryView: React.FC = () => {
             onChange={(e) => setFilterAttendance(e.target.value as any)}
             className="px-3 py-1.5 text-xs rounded-xl border border-slate-300 bg-white font-medium text-slate-800"
           >
-            <option value="All">All Workers ({workers.length})</option>
+            <option value="All">All Workers ({workers.filter((w) => w.status === 'Active').length})</option>
             <option value="Present">Present Only</option>
             <option value="Pending">Pending Log</option>
           </select>
@@ -622,7 +625,7 @@ export const WorklogEntryView: React.FC = () => {
         <div className="flex items-center gap-2">
           <div className="text-xs text-slate-500 font-medium mr-1">
             <strong className="text-teal-800 font-bold">{totalLoggedCount}</strong> of{' '}
-            <strong className="text-slate-900">{workers.length}</strong> logged
+            <strong className="text-slate-900">{workers.filter((w) => w.status === 'Active').length}</strong> logged
           </div>
 
           {settings.spreadsheetId && accessToken && (

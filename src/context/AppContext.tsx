@@ -991,7 +991,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       prev.map((w) => {
         if (w.id === id) {
           const newStatus = w.status === 'Active' ? 'Inactive' : 'Active';
-          showToast('info', `${w.name} is now ${newStatus}. Historical attendance preserved.`);
+          showToast(
+            'info',
+            `${w.name} is now ${newStatus}. ${
+              newStatus === 'Inactive' ? 'Worker hidden from attendance entry.' : 'Worker visible in attendance entry.'
+            }`
+          );
           return { ...w, status: newStatus };
         }
         return w;

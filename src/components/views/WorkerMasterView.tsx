@@ -382,12 +382,16 @@ export const WorkerMasterView: React.FC = () => {
                   <td className="py-2.5 px-3.5">
                     <button
                       onClick={() => toggleWorkerStatus(w.id)}
-                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold cursor-pointer transition ${
+                      className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold cursor-pointer transition ${
                         w.status === 'Active'
                           ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
-                          : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
+                          : 'bg-rose-100 text-rose-800 hover:bg-rose-200 border border-rose-200'
                       }`}
-                      title="Click to toggle status (historical attendance preserved)"
+                      title={
+                        w.status === 'Active'
+                          ? 'Click to set Inactive (Worker will be hidden from Attendance Entry)'
+                          : 'Click to set Active (Worker will be visible in Attendance Entry)'
+                      }
                     >
                       {w.status}
                     </button>
