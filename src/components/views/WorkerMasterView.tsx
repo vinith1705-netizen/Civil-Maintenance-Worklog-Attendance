@@ -113,14 +113,6 @@ export const WorkerMasterView: React.FC = () => {
     }
 
     setModalOpen(false);
-
-    if (syncToSheetOnSave && settings.spreadsheetId) {
-      try {
-        await updateLabourToGoogleSheet();
-      } catch (err: any) {
-        console.warn('Post-save labour sync warning:', err);
-      }
-    }
   };
 
   // Direct Update Labour to Google Sheet
@@ -200,36 +192,14 @@ export const WorkerMasterView: React.FC = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {/* PROMINENT GOOGLE SHEET LABOUR UPDATE BUTTON */}
-          <button
-            type="button"
-            onClick={handleUpdateLabourToGoogleSheet}
-            disabled={isUpdatingLabour}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#1b7a54] hover:bg-[#16654a] text-white text-xs font-bold shadow-md shadow-emerald-950/20 transition cursor-pointer disabled:opacity-50"
-            title="Publish and update all labour records to Google Sheet 'Workers' tab"
-          >
-            {isUpdatingLabour ? (
-              <RefreshCw className="w-4 h-4 animate-spin text-emerald-200" />
-            ) : (
-              <FileSpreadsheet className="w-4 h-4 text-emerald-100" />
-            )}
-            <span>{isUpdatingLabour ? 'Updating Sheet...' : 'Update Labour to Google Sheet'}</span>
-            <span className="ml-0.5 px-1.5 py-0.2 text-[10px] bg-emerald-900/40 rounded-full font-mono">
-              {workers.length}
+          {/* FULL AUTO-SAVE STATUS PILL */}
+          <div className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold shadow-2xs">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
             </span>
-          </button>
-
-          {/* IMPORT LABOUR FROM GOOGLE SHEET */}
-          <button
-            type="button"
-            onClick={handleImportLabourFromGoogleSheet}
-            disabled={isUpdatingLabour}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold border border-slate-300 transition cursor-pointer disabled:opacity-50"
-            title="Import or refresh labour details from Google Sheet"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 text-slate-600 ${isUpdatingLabour ? 'animate-spin' : ''}`} />
-            <span className="hidden sm:inline">Import from Sheet</span>
-          </button>
+            <span>Full Auto-Save Active</span>
+          </div>
 
           <button
             onClick={handleExportCSV}
@@ -249,67 +219,29 @@ export const WorkerMasterView: React.FC = () => {
         </div>
       </div>
 
-      {/* GOOGLE SHEETS LABOUR SYNC BANNER */}
-      {settings.spreadsheetId ? (
-        <div className="p-3.5 bg-emerald-50/90 rounded-2xl border border-emerald-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0">
-              <FileSpreadsheet className="w-4 h-4 text-emerald-700" />
-            </div>
-            <div>
-              <div className="font-bold text-slate-900 flex items-center gap-2">
-                <span>Google Sheet Labour Sync Active</span>
-                <span className="text-[10px] font-mono font-bold bg-white text-emerald-800 px-2 py-0.5 rounded border border-emerald-300">
-                  Tab: {settings.workerSheetName || 'Workers'}
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-600 mt-0.5">
-                Target Sheet ID: <span className="font-mono font-medium text-slate-800">{settings.spreadsheetId}</span>
-              </p>
-            </div>
+      {/* FULL AUTO-SAVE FORMAT BAR */}
+      <div className="p-3.5 bg-slate-50/90 rounded-2xl border border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0">
+            <CheckCircle2 className="w-4 h-4 text-emerald-700" />
           </div>
-
-          <div className="flex items-center gap-2 self-end sm:self-auto">
-            <a
-              href={settings.spreadsheetUrl || `https://docs.google.com/spreadsheets/d/${settings.spreadsheetId}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1 px-3 py-1.5 bg-white border border-emerald-300 hover:bg-emerald-100/50 rounded-xl text-emerald-800 font-bold transition"
-            >
-              <span>View Sheet</span>
-              <ExternalLink className="w-3.5 h-3.5" />
-            </a>
-            <button
-              type="button"
-              onClick={handleUpdateLabourToGoogleSheet}
-              disabled={isUpdatingLabour}
-              className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-xl shadow-xs transition flex items-center gap-1.5"
-            >
-              <UploadCloud className="w-3.5 h-3.5" />
-              <span>Push All Labours Now</span>
-            </button>
+          <div>
+            <div className="font-bold text-slate-900 flex items-center gap-2">
+              <span>Full Auto-Save Format Active</span>
+              <span className="text-[10px] font-mono font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded border border-emerald-200">
+                Instant Persistence
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-500 mt-0.5">
+              No manual sheet sync needed. All worker registrations, status changes, and wage adjustments are automatically saved in real time.
+            </p>
           </div>
         </div>
-      ) : (
-        <div className="p-3.5 bg-amber-50/80 rounded-2xl border border-amber-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-amber-900">
-          <div className="flex items-center gap-2.5">
-            <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
-            <div>
-              <span className="font-bold">Google Spreadsheet Not Yet Connected for Labours</span>
-              <p className="text-[11px] text-amber-800 mt-0.5">
-                Sign in and configure your Google Spreadsheet in Settings to enable real-time 2-way sync with the Workers sheet.
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => setActiveTab('settings')}
-            className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl shadow-xs transition shrink-0"
-          >
-            Configure Sheet Settings →
-          </button>
+        <div className="flex items-center gap-2 self-end sm:self-auto text-xs font-semibold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-200">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse"></span>
+          <span>Auto-Save Formate Only</span>
         </div>
-      )}
+      </div>
 
       {/* Filter and Search Bar */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex flex-wrap items-center justify-between gap-3">
@@ -511,23 +443,10 @@ export const WorkerMasterView: React.FC = () => {
                 </div>
               </div>
 
-              {settings.spreadsheetId && (
-                <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      id="syncToSheetCheckbox"
-                      checked={syncToSheetOnSave}
-                      onChange={(e) => setSyncToSheetOnSave(e.target.checked)}
-                      className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500"
-                    />
-                    <label htmlFor="syncToSheetCheckbox" className="font-semibold text-slate-800 text-xs cursor-pointer">
-                      Update directly to Google Sheet 'Workers' tab
-                    </label>
-                  </div>
-                  <FileSpreadsheet className="w-4 h-4 text-emerald-600 shrink-0" />
-                </div>
-              )}
+              <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 flex items-center gap-2 text-xs text-slate-600">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>Worker record auto-saves instantly to system roster (Full Auto-Save Format).</span>
+              </div>
 
               <div className="flex items-center justify-between gap-2 pt-3 border-t border-slate-200">
                 <button
@@ -539,10 +458,8 @@ export const WorkerMasterView: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  disabled={isUpdatingLabour}
-                  className="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold shadow-md shadow-amber-600/30 transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  className="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold shadow-md shadow-amber-600/30 transition flex items-center gap-1.5 cursor-pointer"
                 >
-                  {isUpdatingLabour ? <RefreshCw className="w-4 h-4 animate-spin" /> : null}
                   <span>{editingWorker ? 'Update Worker' : 'Save New Worker'}</span>
                 </button>
               </div>

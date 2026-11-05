@@ -670,30 +670,13 @@ export const AttendanceEntryView: React.FC = () => {
             </span>
           </div>
 
-          {settings.spreadsheetId && (
-            <div className="flex items-center gap-2 mt-1 sm:mt-0">
-              <button
-                type="button"
-                onClick={() => updateLabourToGoogleSheet()}
-                disabled={isUpdatingLabour}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl text-xs font-bold transition cursor-pointer disabled:opacity-50"
-                title="Publish all labour records to Google Sheet 'Workers' tab (S.No | Worker Name | Category | Status)"
-              >
-                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
-                <span>{isUpdatingLabour ? 'Updating Labours...' : 'Update Labours to Sheet'}</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => updateAttendanceToGoogleSheet(date)}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1b7a54] hover:bg-[#16654a] text-white rounded-xl text-xs font-bold shadow-xs transition cursor-pointer"
-                title="Publish today's attendance to Google Sheet 'Attendance' tab (Date | S.No | Worker Name | Category | Attendance | Locked | Saved Time)"
-              >
-                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-200" />
-                <span>Update Attendance to Sheet</span>
-              </button>
-            </div>
-          )}
+          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold shadow-2xs">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            <span>Full Auto-Save Active</span>
+          </div>
         </div>
 
         {/* Live Counters with Unselected Count */}

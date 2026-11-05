@@ -628,16 +628,13 @@ export const WorklogEntryView: React.FC = () => {
             <strong className="text-slate-900">{workers.filter((w) => w.status === 'Active').length}</strong> logged
           </div>
 
-          {settings.spreadsheetId && accessToken && (
-            <button
-              onClick={handleSyncAllToGoogleSheets}
-              disabled={isBulkSyncing}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-teal-700 hover:bg-teal-800 text-white rounded-xl text-xs font-bold shadow-xs transition disabled:opacity-50 cursor-pointer"
-            >
-              <FileSpreadsheet className="w-3.5 h-3.5" />
-              <span>{isBulkSyncing ? 'Syncing...' : 'Sync to Sheet'}</span>
-            </button>
-          )}
+          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold shadow-2xs">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            <span>Full Auto-Save Active</span>
+          </div>
         </div>
       </div>
 
