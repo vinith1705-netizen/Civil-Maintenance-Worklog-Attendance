@@ -22,7 +22,7 @@ import {
   INITIAL_COMPLAINTS,
   getTodayDateString,
 } from '../data/seedData';
-import { initAuth, googleSignIn, googleSignOut, getAccessToken } from '../services/auth';
+import { initAuth, googleSignIn, googleSignOut, getAccessToken, isTokenStale, clearExpiredToken } from '../services/auth';
 import { db } from '../services/firebase';
 import { doc, setDoc, deleteDoc, writeBatch, collection, getDocs } from 'firebase/firestore';
 import {
@@ -37,6 +37,8 @@ import {
   importWorkersFromGoogleSheet,
   batchUpdateAttendanceToSheet,
   batchUpdateWorklogToSheet,
+  isGoogleAuthError,
+  GoogleAuthExpiredError,
 } from '../services/googleSheets';
 
 interface ToastNotification {
@@ -58,6 +60,7 @@ interface AppContextType {
   setActiveTab: (tab: ViewTab) => void;
   currentUser: User | null;
   accessToken: string | null;
+  googleAuthExpired: boolean;
   isLoggingIn: boolean;
   isSyncing: boolean;
   syncStatus: { status: 'idle' | 'syncing' | 'synced' | 'error'; message?: string };
@@ -73,6 +76,7 @@ interface AppContextType {
   // Actions
   handleGoogleLogin: () => Promise<void>;
   handleGoogleLogout: () => Promise<void>;
+  reconnectGoogleAndSync: () => Promise<void>;
   loginAsSupervisor: (name?: string) => void;
   showToast: (type: ToastNotification['type'], message: string, title?: string) => void;
   clearToast: () => void;
@@ -166,9 +170,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(() => {
     if (typeof window !== 'undefined') {
+      if (isTokenStale()) {
+        clearExpiredToken();
+        return null;
+      }
       return localStorage.getItem('bit_civil_google_access_token');
     }
     return null;
+  });
+  const [googleAuthExpired, setGoogleAuthExpired] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const savedEmail = localStorage.getItem('bit_civil_google_user_email');
+      return Boolean(savedEmail && isTokenStale());
+    }
+    return false;
   });
   const [isLoggingIn, setIsLoggingIn] = useState<boolean>(false);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
@@ -386,28 +401,48 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   }, [settings]);
 
-  // Initialize Firebase Auth listener with any-time persistent connection
+  // Initialize Firebase Auth listener and handle Google token expiration
   useEffect(() => {
+    const handleExpiredEvent = () => {
+      setAccessToken(null);
+      setGoogleAuthExpired(true);
+      clearExpiredToken();
+      setSyncStatus({ status: 'error', message: 'Google session expired' });
+    };
+
+    window.addEventListener('google-oauth-expired', handleExpiredEvent);
+
     const unsubscribe = initAuth(
       (user, token) => {
         setCurrentUser(user);
-        const effectiveToken = token || (typeof window !== 'undefined' ? localStorage.getItem('bit_civil_google_access_token') : null) || '';
-        if (effectiveToken) {
-          setAccessToken(effectiveToken);
+        if (token && !isTokenStale()) {
+          setAccessToken(token);
+          setGoogleAuthExpired(false);
+          setSyncStatus({ status: 'idle', message: 'Google Connected' });
+        } else {
+          setAccessToken(null);
+          setGoogleAuthExpired(true);
+          clearExpiredToken();
+          setSyncStatus({ status: 'idle', message: 'Session Expired' });
         }
-        setSyncStatus({ status: 'idle', message: 'Google Connected' });
       },
       () => {
         const savedToken = typeof window !== 'undefined'
           ? localStorage.getItem('bit_civil_google_access_token')
           : null;
-        if (!savedToken) {
-          setCurrentUser(null);
+        if (!savedToken || isTokenStale()) {
+          clearExpiredToken();
           setAccessToken(null);
+          if (typeof window !== 'undefined' && localStorage.getItem('bit_civil_google_user_email')) {
+            setGoogleAuthExpired(true);
+          }
         }
       }
     );
-    return () => unsubscribe();
+    return () => {
+      window.removeEventListener('google-oauth-expired', handleExpiredEvent);
+      unsubscribe();
+    };
   }, []);
 
   // Load from Firestore when user signs in
@@ -461,7 +496,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (res) {
         setCurrentUser(res.user);
         setAccessToken(res.accessToken);
-        showToast('success', `Signed in as ${res.user.displayName || res.user.email}`);
+        setGoogleAuthExpired(false);
+        showToast('success', `Signed in as ${res.user.displayName || res.user.email}. Google Sheet sync enabled.`);
       }
     } catch (err: any) {
       console.error('Login error:', err);
@@ -480,6 +516,31 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       } else {
         showToast('error', err.message || 'Google Sign-in was cancelled or failed.');
       }
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
+  const reconnectGoogleAndSync = async () => {
+    setIsLoggingIn(true);
+    try {
+      const res = await googleSignIn();
+      if (res) {
+        setCurrentUser(res.user);
+        setAccessToken(res.accessToken);
+        setGoogleAuthExpired(false);
+        showToast('success', 'Google account reconnected! Resuming sync with Google Sheets...', 'Google Reconnected');
+        if (settings.spreadsheetId) {
+          try {
+            await updateWorklogToGoogleSheet();
+          } catch (syncErr: any) {
+            console.warn('Post-reconnect worklog sync notice:', syncErr);
+          }
+        }
+      }
+    } catch (err: any) {
+      console.error('Reconnect error:', err);
+      showToast('error', err.message || 'Could not reconnect Google account.');
     } finally {
       setIsLoggingIn(false);
     }
@@ -947,6 +1008,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setWorklogs((prev) => prev.map((w) => (w.id === finalRecord.id ? { ...w, syncedToSheet: true } : w)));
       } catch (err: any) {
         console.error('Worklog Google Sheet sync failed:', err);
+        if (isGoogleAuthError(err)) {
+          setAccessToken(null);
+          setGoogleAuthExpired(true);
+          clearExpiredToken();
+          showToast(
+            'warning',
+            'Work log saved locally. Google session expired — click "Reconnect Google" in the header to sync with Google Sheet.',
+            'Session Expired'
+          );
+        }
       }
     }
 
@@ -1424,8 +1495,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       return res;
     } catch (err: any) {
       console.error('Update attendance failed:', err);
-      setSyncStatus({ status: 'error', message: err.message });
-      showToast('error', `Failed to update attendance: ${err.message}`);
+      if (isGoogleAuthError(err)) {
+        setAccessToken(null);
+        setGoogleAuthExpired(true);
+        clearExpiredToken();
+        setSyncStatus({ status: 'error', message: 'Google session expired' });
+        showToast(
+          'error',
+          'Google session expired. Click "Reconnect Google" in the top header to renew your token and sync.',
+          'Session Expired'
+        );
+      } else {
+        setSyncStatus({ status: 'error', message: err.message });
+        showToast('error', `Failed to update attendance: ${err.message}`);
+      }
       throw err;
     } finally {
       setIsSyncing(false);
@@ -1435,13 +1518,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   // Update Worklog to Google Sheet (Exact schema: Date | S.No | Worker Name | Category | FN Work | AN Work | Saved Time)
   const updateWorklogToGoogleSheet = async (customDate?: string): Promise<{ success: boolean; count: number }> => {
     let token = accessToken;
-    if (!token) token = await getAccessToken();
-    if (!token) {
-      showToast('warning', 'Please sign in with Google to update Google Sheet.');
-      await handleGoogleLogin();
+    if (!token || isTokenStale()) {
       token = await getAccessToken();
     }
-    if (!token) throw new Error('Google sign-in required.');
+    if (!token) {
+      setGoogleAuthExpired(true);
+      showToast('warning', 'Google session expired. Click "Reconnect Google" in the header to sync with Google Sheet.');
+      return { success: false, count: 0 };
+    }
     if (!settings.spreadsheetId) throw new Error('No Google Spreadsheet linked in Settings.');
 
     const targetDate = customDate || workflowDate || getTodayDateString();
@@ -1476,8 +1560,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       return res;
     } catch (err: any) {
       console.error('Update worklog failed:', err);
-      setSyncStatus({ status: 'error', message: err.message });
-      showToast('error', `Failed to update worklog: ${err.message}`);
+      if (isGoogleAuthError(err)) {
+        setAccessToken(null);
+        setGoogleAuthExpired(true);
+        clearExpiredToken();
+        setSyncStatus({ status: 'error', message: 'Google session expired' });
+        showToast(
+          'error',
+          'Google session expired. Click "Reconnect Google" in the top header to renew your token and sync work logs.',
+          'Session Expired'
+        );
+      } else {
+        setSyncStatus({ status: 'error', message: err.message });
+        showToast('error', `Failed to update worklog: ${err.message}`);
+      }
       throw err;
     } finally {
       setIsSyncing(false);
@@ -1525,6 +1621,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setActiveTab,
       currentUser,
       accessToken,
+      googleAuthExpired,
       isLoggingIn,
       isSyncing,
       isUpdatingLabour,
@@ -1536,6 +1633,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setShowUnauthorizedModal,
       handleGoogleLogin,
       handleGoogleLogout,
+      reconnectGoogleAndSync,
       loginAsSupervisor,
       showToast,
       clearToast,

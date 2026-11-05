@@ -17,6 +17,8 @@ export const Header: React.FC<{ onToggleMobileMenu?: () => void }> = ({ onToggle
     settings,
     currentUser,
     accessToken,
+    googleAuthExpired,
+    reconnectGoogleAndSync,
     handleGoogleLogin,
     handleGoogleLogout,
     isLoggingIn,
@@ -79,8 +81,32 @@ export const Header: React.FC<{ onToggleMobileMenu?: () => void }> = ({ onToggle
           {/* Google Auth Status / User Profile */}
           {(() => {
             const savedEmail = typeof window !== 'undefined' ? localStorage.getItem('bit_civil_google_user_email') : null;
-            const isConnected = Boolean(currentUser || accessToken || savedEmail);
+            const isConnected = Boolean((currentUser || accessToken) && !googleAuthExpired);
+            const isExpired = Boolean(googleAuthExpired || (savedEmail && !accessToken));
             const displayEmail = currentUser?.email || savedEmail || 'Google User';
+
+            if (isExpired) {
+              return (
+                <div className="flex items-center gap-2 pl-2 border-l border-amber-300">
+                  <button
+                    onClick={reconnectGoogleAndSync}
+                    disabled={isLoggingIn}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 active:scale-95 text-white font-bold text-xs shadow-md shadow-amber-500/20 transition cursor-pointer animate-pulse"
+                    title="Google OAuth access token expired (valid for 1 hour). Click to reconnect Google and instantly sync your work log to Google Sheet!"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isLoggingIn ? 'animate-spin' : ''}`} />
+                    <span>{isLoggingIn ? 'Reconnecting...' : '⚠️ Reconnect Google (Token Expired)'}</span>
+                  </button>
+                  <button
+                    onClick={handleGoogleLogout}
+                    title="Clear expired session"
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition cursor-pointer"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              );
+            }
 
             return isConnected ? (
               <div className="flex items-center gap-2 pl-2 border-l border-slate-200">

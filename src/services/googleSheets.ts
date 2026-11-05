@@ -43,6 +43,60 @@ export const extractSpreadsheetId = (input: string): string => {
   return trimmed;
 };
 
+export class GoogleAuthExpiredError extends Error {
+  isAuthError = true;
+  constructor(message = 'Google account session has expired. Please reconnect Google to renew access.') {
+    super(message);
+    this.name = 'GoogleAuthExpiredError';
+  }
+}
+
+export const isGoogleAuthError = (err: any): boolean => {
+  if (!err) return false;
+  if (err instanceof GoogleAuthExpiredError || err.isAuthError) return true;
+  const msg = typeof err === 'string' ? err : err.message || '';
+  return (
+    msg.includes('invalid authentication credentials') ||
+    msg.includes('Expected OAuth 2 access token') ||
+    msg.includes('UNAUTHENTICATED') ||
+    msg.includes('HTTP 401') ||
+    err.status === 401
+  );
+};
+
+export const handleGoogleSheetsError = async (response: Response, context: string): Promise<never> => {
+  let errorData: any = null;
+  try {
+    errorData = await response.json();
+  } catch {
+    // ignore
+  }
+
+  const rawMessage = errorData?.error?.message || `HTTP ${response.status}: Failed during ${context}`;
+
+  if (
+    response.status === 401 ||
+    rawMessage.includes('invalid authentication credentials') ||
+    rawMessage.includes('Expected OAuth 2 access token') ||
+    rawMessage.includes('UNAUTHENTICATED')
+  ) {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('google-oauth-expired', {
+          detail: {
+            message: 'Your Google OAuth session has expired. Please reconnect your Google account to sync.',
+          },
+        })
+      );
+    }
+    throw new GoogleAuthExpiredError(
+      'Google account session has expired. Please reconnect Google to renew your access token and sync with Google Sheets.'
+    );
+  }
+
+  throw new Error(rawMessage);
+};
+
 export const fetchSpreadsheetInfo = async (spreadsheetId: string, token: string): Promise<SheetMetadata> => {
   const cleanId = extractSpreadsheetId(spreadsheetId);
   const response = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${cleanId}`, {
@@ -53,9 +107,7 @@ export const fetchSpreadsheetInfo = async (spreadsheetId: string, token: string)
   });
 
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    const message = errorData?.error?.message || `HTTP ${response.status}: Failed to inspect spreadsheet`;
-    throw new Error(message);
+    await handleGoogleSheetsError(response, 'inspect spreadsheet');
   }
 
   const data = await response.json();
@@ -88,8 +140,7 @@ export const fetchSheetValues = async (
   );
 
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData?.error?.message || `HTTP ${response.status}: Failed to read values from ${range}`);
+    await handleGoogleSheetsError(response, `read values from ${range}`);
   }
 
   const data = await response.json();
@@ -228,8 +279,7 @@ export const appendAttendanceToSheet = async (
   );
 
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData?.error?.message || `HTTP ${response.status}: Failed to append attendance to Google Sheet`);
+    await handleGoogleSheetsError(response, 'append attendance to Google Sheet');
   }
 
   return response.json();
@@ -283,8 +333,7 @@ export const appendWorklogToSheet = async (
   );
 
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData?.error?.message || `HTTP ${response.status}: Failed to append worklog to Google Sheet`);
+    await handleGoogleSheetsError(response, 'append worklog to Google Sheet');
   }
 
   return response.json();
@@ -369,8 +418,7 @@ export const batchUpdateAttendanceToSheet = async (
   );
 
   if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error(err?.error?.message || `Failed to update attendance in Google Sheet`);
+    await handleGoogleSheetsError(response, 'update attendance in Google Sheet');
   }
 
   return { success: true, count: records.length, sheetName: targetSheetTitle };
@@ -449,8 +497,7 @@ export const batchUpdateWorklogToSheet = async (
   );
 
   if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error(err?.error?.message || `Failed to update worklog in Google Sheet`);
+    await handleGoogleSheetsError(response, 'update worklog in Google Sheet');
   }
 
   return { success: true, count: records.length, sheetName: targetSheetTitle };
@@ -484,8 +531,7 @@ export const createNewSpreadsheet = async (
   });
 
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData?.error?.message || 'Failed to create Google Spreadsheet');
+    await handleGoogleSheetsError(response, 'create Google Spreadsheet');
   }
 
   const created = await response.json();
@@ -670,8 +716,7 @@ export const updateAllWorkersToSheet = async (
   );
 
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData?.error?.message || `HTTP ${response.status}: Failed to update labours to Google Sheet`);
+    await handleGoogleSheetsError(response, 'update labours to Google Sheet');
   }
 
   return { success: true, count: workers.length, sheetName: targetSheetTitle };

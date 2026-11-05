@@ -23,10 +23,34 @@ export const STORAGE_KEYS_AUTH = {
   CONNECTED_TIME: 'bit_civil_google_connected_time',
 };
 
+export const isTokenStale = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  const token = localStorage.getItem(STORAGE_KEYS_AUTH.ACCESS_TOKEN);
+  if (!token) return true;
+  const timeStr = localStorage.getItem(STORAGE_KEYS_AUTH.CONNECTED_TIME);
+  if (!timeStr) return false;
+  const elapsed = Date.now() - Number(timeStr);
+  // Google OAuth access tokens expire in 60 minutes. Consider stale at 55 minutes.
+  return elapsed > 55 * 60 * 1000;
+};
+
+export const clearExpiredToken = () => {
+  cachedAccessToken = null;
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem(STORAGE_KEYS_AUTH.ACCESS_TOKEN);
+    localStorage.removeItem(STORAGE_KEYS_AUTH.CONNECTED_TIME);
+  }
+};
+
 let isSigningIn = false;
-let cachedAccessToken: string | null = typeof window !== 'undefined'
-  ? localStorage.getItem(STORAGE_KEYS_AUTH.ACCESS_TOKEN)
-  : null;
+let cachedAccessToken: string | null = null;
+if (typeof window !== 'undefined') {
+  if (!isTokenStale()) {
+    cachedAccessToken = localStorage.getItem(STORAGE_KEYS_AUTH.ACCESS_TOKEN);
+  } else {
+    clearExpiredToken();
+  }
+}
 
 export const initAuth = (
   onAuthSuccess?: (user: User, token: string) => void,
@@ -34,7 +58,9 @@ export const initAuth = (
 ) => {
   return onAuthStateChanged(auth, async (user: User | null) => {
     if (user) {
-      if (!cachedAccessToken && typeof window !== 'undefined') {
+      if (isTokenStale()) {
+        clearExpiredToken();
+      } else if (!cachedAccessToken && typeof window !== 'undefined') {
         cachedAccessToken = localStorage.getItem(STORAGE_KEYS_AUTH.ACCESS_TOKEN);
       }
 
@@ -47,19 +73,15 @@ export const initAuth = (
         }
       }
 
-      // Keep user permanently connected
-      if (onAuthSuccess) {
-        onAuthSuccess(user, cachedAccessToken || '');
+      if (cachedAccessToken && onAuthSuccess) {
+        onAuthSuccess(user, cachedAccessToken);
+      } else if (onAuthFailure) {
+        onAuthFailure();
       }
     } else {
-      // If Firebase auth state has no user, check if we have a cached persistent Google connection
-      const savedToken = typeof window !== 'undefined'
-        ? localStorage.getItem(STORAGE_KEYS_AUTH.ACCESS_TOKEN)
-        : null;
-
-      if (!savedToken && !isSigningIn) {
-        cachedAccessToken = null;
-        if (onAuthFailure) onAuthFailure();
+      clearExpiredToken();
+      if (!isSigningIn && onAuthFailure) {
+        onAuthFailure();
       }
     }
   });
@@ -93,6 +115,10 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
 };
 
 export const getAccessToken = async (): Promise<string | null> => {
+  if (isTokenStale()) {
+    clearExpiredToken();
+    return null;
+  }
   if (cachedAccessToken) return cachedAccessToken;
   if (typeof window !== 'undefined') {
     const saved = localStorage.getItem(STORAGE_KEYS_AUTH.ACCESS_TOKEN);
@@ -112,6 +138,7 @@ export const getSavedGoogleEmail = (): string | null => {
 };
 
 export const isGoogleConnected = (): boolean => {
+  if (isTokenStale()) return false;
   return Boolean(
     cachedAccessToken ||
     (typeof window !== 'undefined' && localStorage.getItem(STORAGE_KEYS_AUTH.ACCESS_TOKEN))
