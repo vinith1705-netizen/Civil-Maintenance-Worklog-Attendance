@@ -127,12 +127,10 @@ export type ViewTab =
   | 'attendance_entry'
   | 'worklog_entry'
   | 'workers'
-  | 'locations'
   | 'categories'
   | 'daily_report'
   | 'monthly_report'
   | 'worker_report'
-  | 'location_report'
   | 'mason_report'
   | 'search'
   | 'settings';

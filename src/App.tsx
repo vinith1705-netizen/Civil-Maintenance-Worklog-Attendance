@@ -11,12 +11,10 @@ import { DashboardView } from './components/views/DashboardView';
 import { AttendanceEntryView } from './components/views/AttendanceEntryView';
 import { WorklogEntryView } from './components/views/WorklogEntryView';
 import { WorkerMasterView } from './components/views/WorkerMasterView';
-import { LocationMasterView } from './components/views/LocationMasterView';
 import { CategoryMasterView } from './components/views/CategoryMasterView';
 import { DailyReportView } from './components/views/DailyReportView';
 import { MonthlyReportView } from './components/views/MonthlyReportView';
 import { WorkerReportView } from './components/views/WorkerReportView';
-import { LocationReportView } from './components/views/LocationReportView';
 import { MasonReportView } from './components/views/MasonReportView';
 import { SearchFilterView } from './components/views/SearchFilterView';
 import { SettingsView } from './components/views/SettingsView';
@@ -35,8 +33,6 @@ const MainLayout: React.FC = () => {
         return <WorklogEntryView />;
       case 'workers':
         return <WorkerMasterView />;
-      case 'locations':
-        return <LocationMasterView />;
       case 'categories':
         return <CategoryMasterView />;
       case 'daily_report':
@@ -45,8 +41,6 @@ const MainLayout: React.FC = () => {
         return <MonthlyReportView />;
       case 'worker_report':
         return <WorkerReportView />;
-      case 'location_report':
-        return <LocationReportView />;
       case 'mason_report':
         return <MasonReportView />;
       case 'search':

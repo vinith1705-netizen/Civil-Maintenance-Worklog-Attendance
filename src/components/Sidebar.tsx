@@ -4,12 +4,10 @@ import {
   CalendarCheck,
   ClipboardList,
   Users,
-  MapPin,
   Tag,
   FileText,
   CalendarRange,
   UserCheck,
-  Building,
   Hammer,
   Search,
   Settings,
@@ -33,13 +31,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onCloseMobile }) =
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, section: 'Overview' },
     
     { id: 'workers', label: 'Worker Master', icon: Users, section: 'Masters' },
-    { id: 'locations', label: 'Work Locations', icon: MapPin },
     { id: 'categories', label: 'Work Categories', icon: Tag },
     
     { id: 'daily_report', label: 'Daily Report', icon: FileText, section: 'Reports & Analytics' },
     { id: 'monthly_report', label: 'Monthly Work Report', icon: CalendarRange, badge: 'Download' },
     { id: 'worker_report', label: 'Worker Report', icon: UserCheck },
-    { id: 'location_report', label: 'Location Report', icon: Building },
     { id: 'mason_report', label: 'Mason Work Summary', icon: Hammer, badge: 'Key' },
     
     { id: 'search', label: 'Search & Filter', icon: Search, section: 'System' },
@@ -75,8 +71,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onCloseMobile }) =
           const itemsInSection = navItems.filter((item) => {
             if (sectionTitle === 'Daily Operations') return item.id === 'attendance_entry' || item.id === 'worklog_entry';
             if (sectionTitle === 'Overview') return item.id === 'dashboard';
-            if (sectionTitle === 'Masters') return item.id === 'workers' || item.id === 'locations' || item.id === 'categories';
-            if (sectionTitle === 'Reports & Analytics') return item.id === 'daily_report' || item.id === 'monthly_report' || item.id === 'worker_report' || item.id === 'location_report' || item.id === 'mason_report';
+            if (sectionTitle === 'Masters') return item.id === 'workers' || item.id === 'categories';
+            if (sectionTitle === 'Reports & Analytics') return item.id === 'daily_report' || item.id === 'monthly_report' || item.id === 'worker_report' || item.id === 'mason_report';
             if (sectionTitle === 'System') return item.id === 'search' || item.id === 'settings';
             return false;
           });

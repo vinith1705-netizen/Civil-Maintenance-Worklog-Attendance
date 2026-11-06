@@ -525,10 +525,10 @@ export const DashboardView: React.FC = () => {
             <div className="flex items-center justify-between mb-3">
               <h3 className="font-bold text-slate-900 text-sm">Site-wise Deployment</h3>
               <button
-                onClick={() => setActiveTab('location_report')}
-                className="text-[11px] font-semibold text-amber-700 hover:underline"
+                onClick={() => setActiveTab('daily_report')}
+                className="text-[11px] font-semibold text-amber-700 hover:underline cursor-pointer"
               >
-                View all
+                Daily report
               </button>
             </div>
             {locationBreakdown.length === 0 ? (
