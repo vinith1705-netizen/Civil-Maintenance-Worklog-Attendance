@@ -8,6 +8,11 @@ import {
   FileSpreadsheet,
   ArrowLeft,
   ChevronRight,
+  ChevronLeft,
+  CalendarDays,
+  CalendarRange,
+  Layers,
+  ListFilter,
   Filter,
   Copy,
   RotateCcw,
@@ -65,8 +70,33 @@ export const WorklogEntryView: React.FC = () => {
   const [viewMode, setViewMode] = useState<'cards' | 'sheet'>('cards');
   const [isBulkSyncing, setIsBulkSyncing] = useState<boolean>(false);
 
-  // Maintain local state for each worker's FN and AN work
+  // Date Filter Scope: 'daily' (single day entry) vs 'monthly' (monthly date entry filter)
+  const [timeFilterMode, setTimeFilterMode] = useState<'daily' | 'monthly'>('daily');
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => {
+    const d = workflowDate || getTodayDateString();
+    return d.slice(0, 7); // e.g. "2026-11"
+  });
+  const [monthlyDateFilter, setMonthlyDateFilter] = useState<string>('ALL'); // 'ALL' or specific YYYY-MM-DD
+
+  // Maintain local state for each worker's FN and AN work in daily view
   const [entries, setEntries] = useState<Record<string, WorkerWorklogState>>({});
+
+  // Maintain local edit state for monthly table rows by worklog id
+  interface MonthlyRowEditState {
+    fnWork: string;
+    anWork: string;
+    isSaving: boolean;
+    autoSaved: boolean;
+    lastSavedAt?: string;
+    isImprovingFN?: boolean;
+    isImprovingAN?: boolean;
+  }
+  const [monthlyRowEdits, setMonthlyRowEdits] = useState<Record<string, MonthlyRowEditState>>({});
+  const monthlyEditsRef = useRef<Record<string, MonthlyRowEditState>>({});
+  useEffect(() => {
+    monthlyEditsRef.current = monthlyRowEdits;
+  }, [monthlyRowEdits]);
+  const monthlySaveTimeoutRef = useRef<Record<string, NodeJS.Timeout>>({});
 
   // Keep a ref to the latest entries state to prevent stale closures in debounce callbacks
   const entriesRef = useRef<Record<string, WorkerWorklogState>>({});
@@ -426,6 +456,345 @@ export const WorklogEntryView: React.FC = () => {
     showToast('success', `Exported daily worklog for ${rows.length} labours.`);
   };
 
+  // Day & Month navigation handlers
+  const handlePrevDay = () => {
+    const d = new Date(date + 'T12:00:00');
+    d.setDate(d.getDate() - 1);
+    const prev = d.toISOString().slice(0, 10);
+    setDate(prev);
+    setWorkflowDate(prev);
+  };
+
+  const handleNextDay = () => {
+    const d = new Date(date + 'T12:00:00');
+    d.setDate(d.getDate() + 1);
+    const next = d.toISOString().slice(0, 10);
+    setDate(next);
+    setWorkflowDate(next);
+  };
+
+  const handleToday = () => {
+    const today = getTodayDateString();
+    setDate(today);
+    setWorkflowDate(today);
+    setSelectedMonth(today.slice(0, 7));
+  };
+
+  const handlePrevMonth = () => {
+    const [yearStr, monthStr] = selectedMonth.split('-');
+    let y = parseInt(yearStr, 10);
+    let m = parseInt(monthStr, 10) - 1;
+    if (m < 1) {
+      m = 12;
+      y -= 1;
+    }
+    const next = `${y}-${String(m).padStart(2, '0')}`;
+    setSelectedMonth(next);
+    setMonthlyDateFilter('ALL');
+  };
+
+  const handleNextMonth = () => {
+    const [yearStr, monthStr] = selectedMonth.split('-');
+    let y = parseInt(yearStr, 10);
+    let m = parseInt(monthStr, 10) + 1;
+    if (m > 12) {
+      m = 1;
+      y += 1;
+    }
+    const next = `${y}-${String(m).padStart(2, '0')}`;
+    setSelectedMonth(next);
+    setMonthlyDateFilter('ALL');
+  };
+
+  const handleCurrentMonth = () => {
+    const current = getTodayDateString().slice(0, 7);
+    setSelectedMonth(current);
+    setMonthlyDateFilter('ALL');
+  };
+
+  const handleJumpToDaily = (targetDate: string) => {
+    setDate(targetDate);
+    setWorkflowDate(targetDate);
+    setTimeFilterMode('daily');
+    showToast('info', `Switched to Daily Entry for ${targetDate}`);
+  };
+
+  const formattedSelectedMonth = useMemo(() => {
+    if (!selectedMonth) return '';
+    const [y, m] = selectedMonth.split('-');
+    const d = new Date(parseInt(y, 10), parseInt(m, 10) - 1, 1);
+    return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  }, [selectedMonth]);
+
+  // All distinct dates in selected month that have worklogs or attendance
+  const monthlyDatesWithData = useMemo(() => {
+    const countsByDate = new Map<string, { worklogs: number; attendance: number }>();
+
+    worklogs.forEach((w) => {
+      if (w.date.startsWith(selectedMonth)) {
+        const cur = countsByDate.get(w.date) || { worklogs: 0, attendance: 0 };
+        cur.worklogs += 1;
+        countsByDate.set(w.date, cur);
+      }
+    });
+
+    attendance.forEach((a) => {
+      if (a.date.startsWith(selectedMonth)) {
+        const cur = countsByDate.get(a.date) || { worklogs: 0, attendance: 0 };
+        cur.attendance += 1;
+        countsByDate.set(a.date, cur);
+      }
+    });
+
+    return Array.from(countsByDate.entries())
+      .map(([d, counts]) => ({ date: d, ...counts }))
+      .sort((a, b) => b.date.localeCompare(a.date));
+  }, [worklogs, attendance, selectedMonth]);
+
+  // Monthly worklogs filtered by search, category, and date-in-month
+  const monthlyWorklogs = useMemo(() => {
+    let logs = worklogs.filter((w) => w.date.startsWith(selectedMonth));
+    if (monthlyDateFilter !== 'ALL') {
+      logs = logs.filter((w) => w.date === monthlyDateFilter);
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      logs = logs.filter(
+        (w) =>
+          w.workerName.toLowerCase().includes(q) ||
+          w.staffId.toLowerCase().includes(q) ||
+          w.designation.toLowerCase().includes(q) ||
+          (w.workDetailsFN && w.workDetailsFN.toLowerCase().includes(q)) ||
+          (w.workDetailsAN && w.workDetailsAN.toLowerCase().includes(q))
+      );
+    }
+    if (filterDesignation !== 'All') {
+      logs = logs.filter(
+        (w) =>
+          w.workCategory?.toLowerCase() === filterDesignation.toLowerCase() ||
+          w.designation.toLowerCase().includes(filterDesignation.toLowerCase())
+      );
+    }
+
+    const sNoMap = new Map<string, number>();
+    workers.forEach((w, idx) => sNoMap.set(w.staffId.toLowerCase(), idx + 1));
+
+    return logs.sort((a, b) => {
+      if (a.date !== b.date) return b.date.localeCompare(a.date);
+      const sNoA = sNoMap.get(a.staffId.toLowerCase()) || 999;
+      const sNoB = sNoMap.get(b.staffId.toLowerCase()) || 999;
+      return sNoA - sNoB;
+    });
+  }, [worklogs, selectedMonth, monthlyDateFilter, searchQuery, filterDesignation, workers]);
+
+  // Total unique logged rows in current monthly view
+  const monthlyTotalLoggedCount = useMemo(() => {
+    return monthlyWorklogs.filter((w) => {
+      const edit = monthlyRowEdits[w.id];
+      const fn = edit !== undefined ? edit.fnWork : w.workDetailsFN;
+      const an = edit !== undefined ? edit.anWork : w.workDetailsAN;
+      return Boolean((fn && fn.trim()) || (an && an.trim()));
+    }).length;
+  }, [monthlyWorklogs, monthlyRowEdits]);
+
+  // Monthly inline editing handler with debounce auto-save to Google Sheet & Firestore
+  const handleMonthlyRowChange = (log: WorklogRecord, field: 'fnWork' | 'anWork', val: string) => {
+    const currentFN = monthlyEditsRef.current[log.id]?.fnWork ?? (log.workDetailsFN || '');
+    const currentAN = monthlyEditsRef.current[log.id]?.anWork ?? (log.workDetailsAN || '');
+    const nextFN = field === 'fnWork' ? val : currentFN;
+    const nextAN = field === 'anWork' ? val : currentAN;
+
+    setMonthlyRowEdits((prev) => ({
+      ...prev,
+      [log.id]: {
+        ...prev[log.id],
+        fnWork: nextFN,
+        anWork: nextAN,
+        isSaving: true,
+        autoSaved: false,
+      },
+    }));
+
+    if (monthlySaveTimeoutRef.current[log.id]) {
+      clearTimeout(monthlySaveTimeoutRef.current[log.id]);
+    }
+
+    monthlySaveTimeoutRef.current[log.id] = setTimeout(async () => {
+      const { fnWork: cleanFN, anWork: cleanAN } = extractFNAfternoonWork(nextFN, nextAN);
+      try {
+        await saveWorklogRecord(
+          {
+            date: log.date,
+            staffId: log.staffId,
+            workerName: log.workerName,
+            designation: log.designation,
+            workCategory: log.workCategory,
+            workLocation: log.workLocation || '',
+            workDetails: cleanFN && cleanAN && cleanFN !== cleanAN ? `FN: ${cleanFN} | AN: ${cleanAN}` : cleanFN || cleanAN || '',
+            session: cleanFN && cleanAN ? 'Full Day' : cleanFN ? 'Forenoon' : 'Afternoon',
+            status: 'Completed',
+            remarks: log.remarks || `Logged for ${log.date}`,
+            workDetailsFN: cleanFN,
+            workDetailsAN: cleanAN,
+          },
+          log.id,
+          Boolean(settings.spreadsheetId && accessToken),
+          false
+        );
+
+        setMonthlyRowEdits((prev) => ({
+          ...prev,
+          [log.id]: {
+            ...prev[log.id],
+            isSaving: false,
+            autoSaved: true,
+            lastSavedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+          },
+        }));
+      } catch (err: any) {
+        console.error('Monthly row save error:', err);
+        setMonthlyRowEdits((prev) => ({
+          ...prev,
+          [log.id]: {
+            ...prev[log.id],
+            isSaving: false,
+          },
+        }));
+        showToast('error', `Failed to save monthly worklog: ${err?.message || 'Error'}`);
+      }
+    }, 600);
+  };
+
+  // AI Polish for a Monthly Row
+  const handleImproveMonthlyRow = async (log: WorklogRecord, field: 'fnWork' | 'anWork') => {
+    const currentFN = monthlyEditsRef.current[log.id]?.fnWork ?? (log.workDetailsFN || '');
+    const currentAN = monthlyEditsRef.current[log.id]?.anWork ?? (log.workDetailsAN || '');
+    const text = field === 'fnWork' ? currentFN : currentAN;
+    if (!text.trim()) return;
+
+    setMonthlyRowEdits((prev) => ({
+      ...prev,
+      [log.id]: {
+        ...prev[log.id],
+        fnWork: currentFN,
+        anWork: currentAN,
+        isSaving: false,
+        autoSaved: false,
+        [field === 'fnWork' ? 'isImprovingFN' : 'isImprovingAN']: true,
+      },
+    }));
+
+    try {
+      const improved = await improveWorkDescription(text, {
+        workerName: log.workerName,
+        designation: log.designation,
+      });
+      handleMonthlyRowChange(log, field, improved);
+      showToast('success', `Refined ${field === 'fnWork' ? 'FN' : 'AN'} description for ${log.workerName}`);
+    } catch {
+      showToast('error', 'Could not refine description.');
+    } finally {
+      setMonthlyRowEdits((prev) => ({
+        ...prev,
+        [log.id]: {
+          ...prev[log.id],
+          [field === 'fnWork' ? 'isImprovingFN' : 'isImprovingAN']: false,
+        },
+      }));
+    }
+  };
+
+  // Copy FN to AN in a Monthly Row
+  const handleCopyFNtoANMonthly = (log: WorklogRecord) => {
+    const currentFN = monthlyEditsRef.current[log.id]?.fnWork ?? (log.workDetailsFN || '');
+    if (!currentFN) return;
+    handleMonthlyRowChange(log, 'anWork', currentFN);
+    showToast('info', `Copied FN work to AN for ${log.workerName} (${log.date})`);
+  };
+
+  // Download / Export Monthly Worklog CSV (Exact 7-column schema)
+  const handleExportMonthlyWorklogCSV = () => {
+    const headers = ['Date', 'S.No', 'Worker Name', 'Category', 'FN Work', 'AN Work', 'Saved Time'];
+    const sNoMap = new Map<string, number>();
+    workers.forEach((w, idx) => sNoMap.set(w.staffId.toLowerCase(), idx + 1));
+    const nowStr = new Date().toLocaleDateString('en-US');
+
+    const rows = monthlyWorklogs.map((log) => {
+      const sNo = sNoMap.get(log.staffId.toLowerCase()) || '';
+      const edit = monthlyEditsRef.current[log.id];
+      const rawFN = edit !== undefined ? edit.fnWork : log.workDetailsFN;
+      const rawAN = edit !== undefined ? edit.anWork : log.workDetailsAN;
+      const { fnWork, anWork } = extractFNAfternoonWork(rawFN, rawAN, log.workDetails);
+      return [
+        log.date,
+        sNo,
+        `"${log.workerName}"`,
+        `"${log.workCategory || log.designation || 'Civil Maintenance'}"`,
+        `"${fnWork.replace(/"/g, '""')}"`,
+        `"${anWork.replace(/"/g, '""')}"`,
+        `"${nowStr}"`,
+      ];
+    });
+
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `BIT_Civil_Worklog_Monthly_${selectedMonth}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast('success', `Exported monthly worklog (${rows.length} entries) for ${formattedSelectedMonth}.`);
+  };
+
+  // Bulk sync all monthly records to Google Sheets
+  const handleSyncMonthlyToGoogleSheets = async () => {
+    if (!settings.spreadsheetId || !accessToken) {
+      showToast('warning', 'Please connect your Google Sheet in Settings to sync.');
+      return;
+    }
+    setIsBulkSyncing(true);
+    try {
+      const recordsToSync = monthlyWorklogs.map((log) => {
+        const edit = monthlyEditsRef.current[log.id];
+        const rawFN = edit !== undefined ? edit.fnWork : log.workDetailsFN;
+        const rawAN = edit !== undefined ? edit.anWork : log.workDetailsAN;
+        const { fnWork, anWork } = extractFNAfternoonWork(rawFN, rawAN, log.workDetails);
+        return {
+          ...log,
+          workDetailsFN: fnWork,
+          workDetailsAN: anWork,
+        };
+      });
+
+      if (recordsToSync.length === 0) {
+        showToast('warning', `No worklog records to sync for ${formattedSelectedMonth}.`);
+        return;
+      }
+
+      const res = await batchUpdateWorklogToSheet(
+        settings.spreadsheetId,
+        settings.worklogSheetName || 'Worklog',
+        recordsToSync as any,
+        workers,
+        accessToken
+      );
+
+      showToast(
+        'success',
+        `Synced all ${res.count} monthly worklog entries for ${formattedSelectedMonth} to Google Sheet!`
+      );
+    } catch (err: any) {
+      if (isGoogleAuthError(err)) {
+        showToast('error', 'Google session expired. Reconnect Google at top.', 'Session Expired');
+      } else {
+        showToast('error', `Monthly sync failed: ${err.message}`);
+      }
+    } finally {
+      setIsBulkSyncing(false);
+    }
+  };
+
   // Helper to determine attendance badge & status for a worker
   const getWorkerAttendanceInfo = (staffId: string) => {
     const att = attendance.find(
@@ -559,7 +928,7 @@ export const WorklogEntryView: React.FC = () => {
           </div>
 
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-            {/* VIEW MODE SWITCHER: Cards vs Google Sheet Daily View */}
+            {/* VIEW MODE SWITCHER: Cards vs Google Sheet View */}
             <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
               <button
                 type="button"
@@ -583,36 +952,134 @@ export const WorklogEntryView: React.FC = () => {
                 }`}
               >
                 <FileSpreadsheet className="w-3.5 h-3.5" />
-                <span>Google Sheet Daily View</span>
+                <span>Google Sheet {timeFilterMode === 'monthly' ? 'Monthly' : 'Daily'} View</span>
               </button>
             </div>
 
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-500 font-medium">Work Log Date:</span>
-              <div className="flex items-center gap-1.5 bg-slate-100 px-3 py-1 rounded-xl border border-slate-200 text-xs font-semibold text-slate-900">
-                <Calendar className="w-3.5 h-3.5 text-teal-700" />
-                <input
-                  type="date"
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  className="bg-transparent focus:outline-none cursor-pointer"
-                />
-              </div>
+            {/* DATE SCOPE TOGGLE: Daily Entry vs Monthly Date Filter */}
+            <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
+              <button
+                type="button"
+                onClick={() => setTimeFilterMode('daily')}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                  timeFilterMode === 'daily'
+                    ? 'bg-teal-800 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+                title="Log / View worklog for a single specific day"
+              >
+                <Calendar className="w-3.5 h-3.5" />
+                <span>Daily</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setTimeFilterMode('monthly');
+                  if (!selectedMonth) setSelectedMonth(date.slice(0, 7));
+                }}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                  timeFilterMode === 'monthly'
+                    ? 'bg-teal-800 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+                title="Monthly Date Entry Filter & Multi-Date Google Sheet View"
+              >
+                <CalendarRange className="w-3.5 h-3.5" />
+                <span>Monthly Filter</span>
+              </button>
             </div>
+
+            {/* DATE OR MONTH CONTROLS */}
+            {timeFilterMode === 'daily' ? (
+              <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1 bg-slate-100 px-2 py-1 rounded-xl border border-slate-200 text-xs font-semibold text-slate-900">
+                  <button
+                    type="button"
+                    onClick={handlePrevDay}
+                    title="Previous Day"
+                    className="p-1 rounded hover:bg-slate-200 text-slate-600 cursor-pointer"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                  </button>
+                  <Calendar className="w-3.5 h-3.5 text-teal-700" />
+                  <input
+                    type="date"
+                    value={date}
+                    onChange={(e) => setDate(e.target.value)}
+                    className="bg-transparent focus:outline-none cursor-pointer text-xs"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleNextDay}
+                    title="Next Day"
+                    className="p-1 rounded hover:bg-slate-200 text-slate-600 cursor-pointer"
+                  >
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleToday}
+                  className="px-2 py-1 text-xs rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold border border-slate-200 cursor-pointer"
+                  title="Jump to Today"
+                >
+                  Today
+                </button>
+              </div>
+            ) : (
+              <div className="flex flex-wrap items-center gap-1.5">
+                <div className="flex items-center gap-1 bg-teal-50 px-2 py-1 rounded-xl border border-teal-200 text-xs font-bold text-teal-900">
+                  <button
+                    type="button"
+                    onClick={handlePrevMonth}
+                    title="Previous Month"
+                    className="p-1 rounded hover:bg-teal-100 text-teal-800 cursor-pointer"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                  </button>
+                  <CalendarDays className="w-3.5 h-3.5 text-teal-700" />
+                  <input
+                    type="month"
+                    value={selectedMonth}
+                    onChange={(e) => {
+                      setSelectedMonth(e.target.value);
+                      setMonthlyDateFilter('ALL');
+                    }}
+                    className="bg-transparent focus:outline-none cursor-pointer text-xs font-bold text-teal-900"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleNextMonth}
+                    title="Next Month"
+                    className="p-1 rounded hover:bg-teal-100 text-teal-800 cursor-pointer"
+                  >
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCurrentMonth}
+                  className="px-2 py-1 text-xs rounded-xl bg-teal-50 hover:bg-teal-100 text-teal-800 font-bold border border-teal-200 cursor-pointer"
+                  title="Current Month"
+                >
+                  This Month
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
 
       {/* FILTER & QUICK SYNC BAR */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2 flex-1 min-w-[240px]">
-          <div className="relative flex-1">
+        <div className="flex flex-wrap items-center gap-2 flex-1 min-w-[240px]">
+          <div className="relative flex-1 min-w-[180px]">
             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search labour name, staff ID (e.g. CM41001), trade..."
+              placeholder="Search labour name, staff ID, task details..."
               className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-teal-500/20 bg-white text-slate-900"
             />
           </div>
@@ -628,21 +1095,51 @@ export const WorklogEntryView: React.FC = () => {
             <option value="Welding Work">Welding Work</option>
           </select>
 
-          <select
-            value={filterAttendance}
-            onChange={(e) => setFilterAttendance(e.target.value as any)}
-            className="px-3 py-1.5 text-xs rounded-xl border border-slate-300 bg-white font-medium text-slate-800"
-          >
-            <option value="All">All Workers ({workers.filter((w) => w.status === 'Active').length})</option>
-            <option value="Present">Present Only</option>
-            <option value="Pending">Pending Log</option>
-          </select>
+          {timeFilterMode === 'daily' ? (
+            <select
+              value={filterAttendance}
+              onChange={(e) => setFilterAttendance(e.target.value as any)}
+              className="px-3 py-1.5 text-xs rounded-xl border border-slate-300 bg-white font-medium text-slate-800 cursor-pointer"
+            >
+              <option value="All">All Workers ({workers.filter((w) => w.status === 'Active').length})</option>
+              <option value="Present">Present Only</option>
+              <option value="Pending">Pending Log</option>
+            </select>
+          ) : (
+            <div className="flex items-center gap-1.5 bg-slate-50 px-2.5 py-1.5 rounded-xl border border-slate-200 text-xs">
+              <Filter className="w-3.5 h-3.5 text-teal-700" />
+              <span className="text-[11px] font-bold text-slate-500">Date Filter:</span>
+              <select
+                value={monthlyDateFilter}
+                onChange={(e) => setMonthlyDateFilter(e.target.value)}
+                className="bg-transparent font-bold text-teal-900 focus:outline-none cursor-pointer"
+              >
+                <option value="ALL">
+                  All Dates in {formattedSelectedMonth} ({monthlyDatesWithData.reduce((acc, d) => acc + d.worklogs, 0)} logs)
+                </option>
+                {monthlyDatesWithData.map((d) => (
+                  <option key={d.date} value={d.date}>
+                    {d.date} ({d.worklogs} logs)
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
           <div className="text-xs text-slate-500 font-medium mr-1">
-            <strong className="text-teal-800 font-bold">{totalLoggedCount}</strong> of{' '}
-            <strong className="text-slate-900">{workers.filter((w) => w.status === 'Active').length}</strong> logged
+            {timeFilterMode === 'daily' ? (
+              <>
+                <strong className="text-teal-800 font-bold">{totalLoggedCount}</strong> of{' '}
+                <strong className="text-slate-900">{workers.filter((w) => w.status === 'Active').length}</strong> logged
+              </>
+            ) : (
+              <>
+                <strong className="text-teal-800 font-bold">{monthlyWorklogs.length}</strong> logs across{' '}
+                <strong className="text-slate-900">{monthlyDatesWithData.length}</strong> active days
+              </>
+            )}
           </div>
 
           <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold shadow-2xs">
@@ -656,255 +1153,663 @@ export const WorklogEntryView: React.FC = () => {
       </div>
 
       {viewMode === 'sheet' ? (
-        <div className="space-y-4 animate-in fade-in duration-200">
-          {/* GOOGLE SHEET WORKLOG BANNER */}
-          <div className="bg-gradient-to-r from-emerald-900 via-emerald-800 to-teal-900 text-white rounded-2xl p-4 md:p-5 shadow-lg border border-emerald-700 space-y-4">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center text-emerald-300 shrink-0 border border-white/20">
-                  <FileSpreadsheet className="w-6 h-6 text-emerald-300" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 text-[10px] font-bold uppercase tracking-wider font-mono">
-                      Google Sheet • Tab: {settings.worklogSheetName || 'Worklog'}
-                    </span>
-                    <span className="text-xs text-emerald-200 font-medium">Daily Muster Entry</span>
+        timeFilterMode === 'monthly' ? (
+          <div className="space-y-4 animate-in fade-in duration-200">
+            {/* GOOGLE SHEET MONTHLY WORKLOG BANNER */}
+            <div className="bg-gradient-to-r from-emerald-950 via-emerald-900 to-teal-950 text-white rounded-2xl p-4 md:p-5 shadow-lg border border-emerald-700 space-y-4">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center text-emerald-300 shrink-0 border border-white/20">
+                    <FileSpreadsheet className="w-6 h-6 text-emerald-300" />
                   </div>
-                  <h2 className="text-base sm:text-lg font-bold tracking-tight text-white mt-0.5">
-                    Daily Worklog Entries for {date}
-                  </h2>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 text-[10px] font-bold uppercase tracking-wider font-mono">
+                        Google Sheet • Tab: {settings.worklogSheetName || 'Worklog'}
+                      </span>
+                      <span className="text-xs text-emerald-200 font-medium">Monthly Work Log Entry & Audit</span>
+                    </div>
+                    <h2 className="text-base sm:text-lg font-bold tracking-tight text-white mt-0.5">
+                      Monthly Worklog Entries — {formattedSelectedMonth}
+                    </h2>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  {settings.spreadsheetUrl && (
+                    <a
+                      href={settings.spreadsheetUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold border border-white/20 transition cursor-pointer"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5 text-emerald-300" />
+                      <span>Open in Google Sheets</span>
+                    </a>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={handleExportMonthlyWorklogCSV}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold border border-white/20 transition cursor-pointer"
+                    title="Download 7-column CSV for offline backup"
+                  >
+                    <Download className="w-3.5 h-3.5 text-emerald-300" />
+                    <span>Export Monthly CSV ({monthlyWorklogs.length})</span>
+                  </button>
+
+                  {settings.spreadsheetId && accessToken ? (
+                    <button
+                      type="button"
+                      onClick={handleSyncMonthlyToGoogleSheets}
+                      disabled={isBulkSyncing}
+                      className="flex items-center gap-2 px-4 py-1.5 rounded-xl bg-emerald-400 hover:bg-emerald-300 active:scale-95 text-emerald-950 text-xs font-black shadow-md shadow-emerald-500/30 transition cursor-pointer disabled:opacity-50"
+                      title="Sync all monthly records to Google Sheet Worklog tab"
+                    >
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-950 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-950"></span>
+                      </span>
+                      <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-950" />
+                      <span>{isBulkSyncing ? 'Auto-Saving...' : 'Sync Monthly to Google Sheet'}</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={googleAuthExpired ? reconnectGoogleAndSync : handleGoogleLogin}
+                      disabled={isLoggingIn}
+                      className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-emerald-950 text-xs font-black shadow-md shadow-emerald-500/30 transition cursor-pointer"
+                    >
+                      <FileSpreadsheet className="w-3.5 h-3.5" />
+                      <span>{isLoggingIn ? 'Connecting...' : 'Connect Google Sheet (Auto-Save)'}</span>
+                    </button>
+                  )}
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2">
-                {settings.spreadsheetUrl && (
-                  <a
-                    href={settings.spreadsheetUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold border border-white/20 transition cursor-pointer"
-                  >
-                    <ExternalLink className="w-3.5 h-3.5 text-emerald-300" />
-                    <span>Open in Google Sheets</span>
-                  </a>
-                )}
-
-                <button
-                  type="button"
-                  onClick={handleExportDailyWorklogCSV}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold border border-white/20 transition cursor-pointer"
-                  title="Download matching 7-column CSV for offline backup"
-                >
-                  <Download className="w-3.5 h-3.5 text-emerald-300" />
-                  <span>Export CSV</span>
-                </button>
-
-                {settings.spreadsheetId && accessToken ? (
-                  <button
-                    type="button"
-                    onClick={handleSyncAllToGoogleSheets}
-                    disabled={isBulkSyncing}
-                    className="flex items-center gap-2 px-4 py-1.5 rounded-xl bg-emerald-400 hover:bg-emerald-300 active:scale-95 text-emerald-950 text-xs font-black shadow-md shadow-emerald-500/30 transition cursor-pointer disabled:opacity-50"
-                    title="Google Sheet Full Auto-Save is active. Click to immediately force-save all rows to Google Sheet in exact format."
-                  >
-                    <span className="relative flex h-2 w-2">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-950 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-950"></span>
-                    </span>
-                    <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-950" />
-                    <span>{isBulkSyncing ? 'Auto-Saving...' : 'Google Sheet Full Auto-Save Active'}</span>
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={googleAuthExpired ? reconnectGoogleAndSync : handleGoogleLogin}
-                    disabled={isLoggingIn}
-                    className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-emerald-950 text-xs font-black shadow-md shadow-emerald-500/30 transition cursor-pointer"
-                    title="Connect Google Sheet to enable full auto-save"
-                  >
-                    <FileSpreadsheet className="w-3.5 h-3.5" />
-                    <span>{isLoggingIn ? 'Connecting...' : 'Connect Google Sheet (Auto-Save)'}</span>
-                  </button>
-                )}
+              <div className="bg-emerald-950/60 rounded-xl p-2.5 px-3 border border-emerald-800/80 flex flex-wrap items-center justify-between text-[11px] text-emerald-200 gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-emerald-400 font-bold">Exact Schema:</span>
+                  <span className="font-mono text-white text-[11px]">
+                    Date | S.No | Worker Name | Category | Forenoon Work (FN) | Afternoon Work (AN) | Saved Time
+                  </span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="font-mono text-emerald-300 font-bold flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Full Auto-Save Active</span>
+                  </span>
+                  <span>•</span>
+                  <span>
+                    Showing <strong className="text-white font-bold">{monthlyWorklogs.length}</strong> entries across{' '}
+                    <strong className="text-white font-bold">{monthlyDatesWithData.length}</strong> active days
+                  </span>
+                </div>
               </div>
             </div>
 
-            <div className="bg-emerald-950/60 rounded-xl p-2.5 px-3 border border-emerald-800/80 flex flex-wrap items-center justify-between text-[11px] text-emerald-200 gap-2">
-              <div className="flex items-center gap-2">
-                <span className="font-mono text-emerald-400 font-bold">Exact Schema:</span>
-                <span className="font-mono text-white text-[11px]">
-                  Date | S.No | Worker Name | Category | Forenoon Work (FN) | Afternoon Work (AN) | Saved Time
-                </span>
+            {/* MONTHLY DATE QUICK FILTER STRIP */}
+            <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-2 overflow-x-auto text-xs">
+              <div className="flex items-center gap-1.5 text-slate-500 font-bold text-[11px] shrink-0 mr-1">
+                <Calendar className="w-3.5 h-3.5 text-teal-700" />
+                <span>Date Filter:</span>
               </div>
-              <div className="flex items-center gap-3">
-                <span className="font-mono text-emerald-300 font-bold flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Full Auto-Save Active</span>
-                </span>
-                <span>•</span>
-                <span>
-                  Showing <strong className="text-white font-bold">{filteredWorkers.length}</strong> labours
-                </span>
-              </div>
+
+              <button
+                type="button"
+                onClick={() => setMonthlyDateFilter('ALL')}
+                className={`px-3 py-1 rounded-xl text-xs font-bold transition shrink-0 cursor-pointer ${
+                  monthlyDateFilter === 'ALL'
+                    ? 'bg-teal-800 text-white shadow-xs'
+                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                }`}
+              >
+                All Dates ({monthlyWorklogs.length})
+              </button>
+
+              {monthlyDatesWithData.map((d) => {
+                const isSelected = monthlyDateFilter === d.date;
+                const dateObj = new Date(d.date + 'T12:00:00');
+                const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'short' });
+                const formattedD = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+                return (
+                  <div key={d.date} className="flex items-center shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setMonthlyDateFilter(d.date)}
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-l-xl text-xs font-semibold transition cursor-pointer border ${
+                        isSelected
+                          ? 'bg-teal-700 text-white border-teal-800 shadow-xs'
+                          : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                      }`}
+                    >
+                      <span className="font-mono">{formattedD}</span>
+                      <span className="text-[10px] opacity-80 uppercase">({dayName})</span>
+                      <span
+                        className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${
+                          isSelected ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-800'
+                        }`}
+                      >
+                        {d.worklogs}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleJumpToDaily(d.date)}
+                      title={`Jump to Daily Entry for ${d.date}`}
+                      className={`px-2 py-1 rounded-r-xl border-y border-r text-[10px] font-bold transition cursor-pointer ${
+                        isSelected
+                          ? 'bg-teal-800 text-teal-100 border-teal-800 hover:bg-teal-900'
+                          : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200 hover:text-slate-800'
+                      }`}
+                    >
+                      Daily →
+                    </button>
+                  </div>
+                );
+              })}
             </div>
+
+            {/* MONTHLY GOOGLE SHEET TABULAR VIEW */}
+            {monthlyWorklogs.length === 0 ? (
+              <div className="bg-white rounded-2xl border-2 border-dashed border-slate-300 p-8 text-center space-y-3">
+                <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
+                  <AlertCircle className="w-6 h-6" />
+                </div>
+                <h3 className="text-sm font-bold text-slate-800">No monthly worklog records found</h3>
+                <p className="text-xs text-slate-500 max-w-md mx-auto">
+                  {monthlyDateFilter !== 'ALL'
+                    ? `No entries found for date ${monthlyDateFilter}. Clear the date filter or switch to Daily Entry to log work for this day.`
+                    : `No worklogs have been logged yet for ${formattedSelectedMonth}. Use Step 1 Roll Call or switch to Daily Entry to start logging.`}
+                </p>
+                <div className="flex items-center justify-center gap-2 pt-2">
+                  {monthlyDateFilter !== 'ALL' && (
+                    <button
+                      type="button"
+                      onClick={() => setMonthlyDateFilter('ALL')}
+                      className="px-3.5 py-1.5 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold shadow-xs transition cursor-pointer"
+                    >
+                      Show All Dates in {formattedSelectedMonth}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDate(monthlyDateFilter !== 'ALL' ? monthlyDateFilter : getTodayDateString());
+                      setTimeFilterMode('daily');
+                    }}
+                    className="px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition cursor-pointer"
+                  >
+                    Go to Daily Entry
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-emerald-50/90 border-b border-emerald-200 text-emerald-950 font-bold text-[11px] uppercase tracking-wider">
+                        <th className="py-2.5 px-3 border-r border-emerald-200 whitespace-nowrap w-28">Date</th>
+                        <th className="py-2.5 px-2 border-r border-emerald-200 text-center whitespace-nowrap w-12">S.No</th>
+                        <th className="py-2.5 px-3 border-r border-emerald-200 whitespace-nowrap min-w-[200px]">Worker Name</th>
+                        <th className="py-2.5 px-3 border-r border-emerald-200 whitespace-nowrap min-w-[130px]">Category</th>
+                        <th className="py-2.5 px-3 border-r border-emerald-200 min-w-[280px]">Forenoon Work (FN)</th>
+                        <th className="py-2.5 px-3 border-r border-emerald-200 min-w-[280px]">Afternoon Work (AN)</th>
+                        <th className="py-2.5 px-3 border-r border-emerald-200 whitespace-nowrap w-28">Saved Time</th>
+                        <th className="py-2.5 px-2 text-center whitespace-nowrap w-24">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      {monthlyWorklogs.map((log, idx) => {
+                        const edit = monthlyRowEdits[log.id];
+                        const { fnWork: defaultFN, anWork: defaultAN } = extractFNAfternoonWork(
+                          log.workDetailsFN,
+                          log.workDetailsAN,
+                          log.workDetails
+                        );
+                        const currentFN = edit !== undefined ? edit.fnWork : defaultFN;
+                        const currentAN = edit !== undefined ? edit.anWork : defaultAN;
+                        const isSaving = edit?.isSaving || false;
+                        const isAutoSaved = edit?.autoSaved || Boolean(log.syncedToSheet);
+                        const savedTimeStr = edit?.lastSavedAt || (log.createdAt ? new Date(log.createdAt).toLocaleDateString('en-US') : new Date().toLocaleDateString('en-US'));
+
+                        const sNo = workers.findIndex((w) => w.staffId.toLowerCase() === log.staffId.toLowerCase()) + 1;
+                        const dateObj = new Date(log.date + 'T12:00:00');
+                        const dayOfWeek = dateObj.toLocaleDateString('en-US', { weekday: 'short' });
+
+                        return (
+                          <tr
+                            key={`${log.id}-${idx}`}
+                            className="hover:bg-emerald-50/30 transition group"
+                          >
+                            <td className="py-2 px-3 border-r border-slate-200 font-mono text-[11px] whitespace-nowrap">
+                              <div className="font-bold text-slate-800">{log.date}</div>
+                              <span className="text-[10px] text-slate-500 font-sans uppercase font-medium">{dayOfWeek}</span>
+                            </td>
+                            <td className="py-2 px-2 border-r border-slate-200 text-center font-mono font-bold text-slate-800 text-[11px]">
+                              {sNo || idx + 1}
+                            </td>
+                            <td className="py-2 px-3 border-r border-slate-200">
+                              <div className="font-bold text-slate-900 leading-tight">{log.workerName}</div>
+                              <div className="font-mono text-[10px] text-slate-500">{log.staffId}</div>
+                            </td>
+                            <td className="py-2 px-3 border-r border-slate-200 font-medium text-slate-700 whitespace-nowrap">
+                              <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-800 border border-slate-200 text-[11px]">
+                                {log.workCategory || log.designation}
+                              </span>
+                            </td>
+                            <td className="py-1.5 px-2 border-r border-slate-200">
+                              <div className="relative">
+                                <input
+                                  type="text"
+                                  value={currentFN}
+                                  onChange={(e) => handleMonthlyRowChange(log, 'fnWork', e.target.value)}
+                                  placeholder="Enter FN tasks..."
+                                  className="w-full text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white"
+                                />
+                                {currentFN && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleImproveMonthlyRow(log, 'fnWork')}
+                                    disabled={edit?.isImprovingFN}
+                                    title="AI Refine description"
+                                    className="absolute right-1.5 top-1.5 p-1 rounded hover:bg-slate-100 text-amber-600 disabled:opacity-50 cursor-pointer"
+                                  >
+                                    <Sparkles className="w-3 h-3" />
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                            <td className="py-1.5 px-2 border-r border-slate-200">
+                              <div className="relative">
+                                <input
+                                  type="text"
+                                  value={currentAN}
+                                  onChange={(e) => handleMonthlyRowChange(log, 'anWork', e.target.value)}
+                                  placeholder="Enter AN tasks..."
+                                  className="w-full text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white"
+                                />
+                                {currentAN && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleImproveMonthlyRow(log, 'anWork')}
+                                    disabled={edit?.isImprovingAN}
+                                    title="AI Refine description"
+                                    className="absolute right-1.5 top-1.5 p-1 rounded hover:bg-slate-100 text-amber-600 disabled:opacity-50 cursor-pointer"
+                                  >
+                                    <Sparkles className="w-3 h-3" />
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                            <td className="py-2 px-3 border-r border-slate-200 font-mono text-[11px] text-slate-500 whitespace-nowrap">
+                              <div className="flex items-center gap-1">
+                                {isSaving ? (
+                                  <span className="text-amber-600 font-sans text-[10px] font-bold flex items-center gap-1">
+                                    <Clock className="w-3 h-3 animate-spin" /> Saving...
+                                  </span>
+                                ) : isAutoSaved ? (
+                                  <span className="text-emerald-700 flex items-center gap-1 font-sans text-[10px] font-bold">
+                                    <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Auto-saved
+                                  </span>
+                                ) : (
+                                  <span>{savedTimeStr}</span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="py-2 px-2 text-center whitespace-nowrap">
+                              <div className="flex items-center justify-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => handleCopyFNtoANMonthly(log)}
+                                  title="Copy FN to AN"
+                                  disabled={!currentFN}
+                                  className="p-1 rounded-lg text-slate-400 hover:text-emerald-700 hover:bg-emerald-50 disabled:opacity-20 transition cursor-pointer"
+                                >
+                                  <Copy className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleJumpToDaily(log.date)}
+                                  title={`Jump to Daily Entry for ${log.date}`}
+                                  className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 hover:bg-teal-50 text-slate-600 hover:text-teal-800 transition cursor-pointer"
+                                >
+                                  Edit Day
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
+        ) : (
+          <div className="space-y-4 animate-in fade-in duration-200">
+            {/* GOOGLE SHEET WORKLOG BANNER */}
+            <div className="bg-gradient-to-r from-emerald-900 via-emerald-800 to-teal-900 text-white rounded-2xl p-4 md:p-5 shadow-lg border border-emerald-700 space-y-4">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center text-emerald-300 shrink-0 border border-white/20">
+                    <FileSpreadsheet className="w-6 h-6 text-emerald-300" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 text-[10px] font-bold uppercase tracking-wider font-mono">
+                        Google Sheet • Tab: {settings.worklogSheetName || 'Worklog'}
+                      </span>
+                      <span className="text-xs text-emerald-200 font-medium">Daily Muster Entry</span>
+                    </div>
+                    <h2 className="text-base sm:text-lg font-bold tracking-tight text-white mt-0.5">
+                      Daily Worklog Entries for {date}
+                    </h2>
+                  </div>
+                </div>
 
-          {/* GOOGLE SHEET TABULAR VIEW */}
-          {filteredWorkers.length === 0 ? (
-            <div className="bg-white rounded-2xl border-2 border-dashed border-slate-300 p-8 text-center space-y-3">
-              <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
-                <AlertCircle className="w-6 h-6" />
+                <div className="flex flex-wrap items-center gap-2">
+                  {settings.spreadsheetUrl && (
+                    <a
+                      href={settings.spreadsheetUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold border border-white/20 transition cursor-pointer"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5 text-emerald-300" />
+                      <span>Open in Google Sheets</span>
+                    </a>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={handleExportDailyWorklogCSV}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold border border-white/20 transition cursor-pointer"
+                    title="Download matching 7-column CSV for offline backup"
+                  >
+                    <Download className="w-3.5 h-3.5 text-emerald-300" />
+                    <span>Export CSV</span>
+                  </button>
+
+                  {settings.spreadsheetId && accessToken ? (
+                    <button
+                      type="button"
+                      onClick={handleSyncAllToGoogleSheets}
+                      disabled={isBulkSyncing}
+                      className="flex items-center gap-2 px-4 py-1.5 rounded-xl bg-emerald-400 hover:bg-emerald-300 active:scale-95 text-emerald-950 text-xs font-black shadow-md shadow-emerald-500/30 transition cursor-pointer disabled:opacity-50"
+                      title="Google Sheet Full Auto-Save is active. Click to immediately force-save all rows to Google Sheet in exact format."
+                    >
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-950 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-950"></span>
+                      </span>
+                      <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-950" />
+                      <span>{isBulkSyncing ? 'Auto-Saving...' : 'Google Sheet Full Auto-Save Active'}</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={googleAuthExpired ? reconnectGoogleAndSync : handleGoogleLogin}
+                      disabled={isLoggingIn}
+                      className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-emerald-950 text-xs font-black shadow-md shadow-emerald-500/30 transition cursor-pointer"
+                      title="Connect Google Sheet to enable full auto-save"
+                    >
+                      <FileSpreadsheet className="w-3.5 h-3.5" />
+                      <span>{isLoggingIn ? 'Connecting...' : 'Connect Google Sheet (Auto-Save)'}</span>
+                    </button>
+                  )}
+                </div>
               </div>
-              <h3 className="text-sm font-bold text-slate-800">No labours found matching your filter</h3>
-              <p className="text-xs text-slate-500 max-w-md mx-auto">
-                {filterAttendance === 'Present'
-                  ? `No workers are marked 'Present' for ${date}. In Step 1 Attendance Roll Call, mark present labours to log their work.`
-                  : 'Try clearing the search query or changing trade filter to see labours.'}
-              </p>
-              <div className="flex items-center justify-center gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setFilterAttendance('All');
-                    setSearchQuery('');
-                    setFilterDesignation('All');
-                  }}
-                  className="px-3.5 py-1.5 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold shadow-xs transition cursor-pointer"
-                >
-                  Show All Workers ({workers.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setWorkflowDate(date);
-                    setActiveTab('attendance_entry');
-                  }}
-                  className="px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition cursor-pointer"
-                >
-                  Go to Step 1: Roll Call
-                </button>
+
+              <div className="bg-emerald-950/60 rounded-xl p-2.5 px-3 border border-emerald-800/80 flex flex-wrap items-center justify-between text-[11px] text-emerald-200 gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-emerald-400 font-bold">Exact Schema:</span>
+                  <span className="font-mono text-white text-[11px]">
+                    Date | S.No | Worker Name | Category | Forenoon Work (FN) | Afternoon Work (AN) | Saved Time
+                  </span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="font-mono text-emerald-300 font-bold flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Full Auto-Save Active</span>
+                  </span>
+                  <span>•</span>
+                  <span>
+                    Showing <strong className="text-white font-bold">{filteredWorkers.length}</strong> labours
+                  </span>
+                </div>
               </div>
             </div>
-          ) : (
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="bg-emerald-50/90 border-b border-emerald-200 text-emerald-950 font-bold text-[11px] uppercase tracking-wider">
-                      <th className="py-2.5 px-3 border-r border-emerald-200 whitespace-nowrap w-24">Date</th>
-                      <th className="py-2.5 px-2 border-r border-emerald-200 text-center whitespace-nowrap w-12">S.No</th>
-                      <th className="py-2.5 px-3 border-r border-emerald-200 whitespace-nowrap min-w-[200px]">Worker Name</th>
-                      <th className="py-2.5 px-3 border-r border-emerald-200 whitespace-nowrap min-w-[130px]">Category</th>
-                      <th className="py-2.5 px-3 border-r border-emerald-200 min-w-[280px]">Forenoon Work (FN)</th>
-                      <th className="py-2.5 px-3 border-r border-emerald-200 min-w-[280px]">Afternoon Work (AN)</th>
-                      <th className="py-2.5 px-3 border-r border-emerald-200 whitespace-nowrap w-28">Saved Time</th>
-                      <th className="py-2.5 px-2 text-center whitespace-nowrap w-16">Quick</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200">
-                    {filteredWorkers.map((worker, idx) => {
-                      const entry = entries[worker.staffId] || {
-                        worker,
-                        fnWork: '',
-                        anWork: '',
-                        autoSaved: false,
-                        isSaving: false,
-                        isImprovingFN: false,
-                        isImprovingAN: false,
-                      };
-                      const sNo = workers.findIndex((w) => w.staffId === worker.staffId) + 1;
-                      const savedTimeStr = entry.lastSavedAt || new Date().toLocaleDateString('en-US');
 
-                      return (
-                        <tr
-                          key={`${worker.staffId || worker.id}-sheet-${idx}`}
-                          className="hover:bg-emerald-50/30 transition group"
-                        >
-                          <td className="py-2 px-3 border-r border-slate-200 font-mono text-[11px] text-slate-700 whitespace-nowrap">
-                            {date}
-                          </td>
-                          <td className="py-2 px-2 border-r border-slate-200 text-center font-mono font-bold text-slate-800 text-[11px]">
-                            {sNo}
-                          </td>
-                          <td className="py-2 px-3 border-r border-slate-200">
-                            <div className="font-bold text-slate-900 leading-tight">{worker.name}</div>
-                            <div className="font-mono text-[10px] text-slate-500">{worker.staffId}</div>
-                          </td>
-                          <td className="py-2 px-3 border-r border-slate-200 font-medium text-slate-700 whitespace-nowrap">
-                            <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-800 border border-slate-200 text-[11px]">
-                              {worker.category || worker.designation}
-                            </span>
-                          </td>
-                          <td className="py-1.5 px-2 border-r border-slate-200">
-                            <div className="relative">
-                              <input
-                                type="text"
-                                value={entry.fnWork}
-                                onChange={(e) => handleInputChange(worker.staffId, 'fnWork', e.target.value)}
-                                placeholder="Enter FN civil tasks..."
-                                className="w-full text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white"
-                              />
-                              {entry.fnWork && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleImprove(worker.staffId, 'fnWork')}
-                                  disabled={entry.isImprovingFN}
-                                  title="AI Refine description"
-                                  className="absolute right-1.5 top-1.5 p-1 rounded hover:bg-slate-100 text-amber-600 disabled:opacity-50 cursor-pointer"
-                                >
-                                  <Sparkles className="w-3 h-3" />
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                          <td className="py-1.5 px-2 border-r border-slate-200">
-                            <div className="relative">
-                              <input
-                                type="text"
-                                value={entry.anWork}
-                                onChange={(e) => handleInputChange(worker.staffId, 'anWork', e.target.value)}
-                                placeholder="Enter AN civil tasks..."
-                                className="w-full text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white"
-                              />
-                              {entry.anWork && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleImprove(worker.staffId, 'anWork')}
-                                  disabled={entry.isImprovingAN}
-                                  title="AI Refine description"
-                                  className="absolute right-1.5 top-1.5 p-1 rounded hover:bg-slate-100 text-amber-600 disabled:opacity-50 cursor-pointer"
-                                >
-                                  <Sparkles className="w-3 h-3" />
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                          <td className="py-2 px-3 border-r border-slate-200 font-mono text-[11px] text-slate-500 whitespace-nowrap">
-                            {savedTimeStr}
-                          </td>
-                          <td className="py-2 px-2 text-center whitespace-nowrap">
-                            <button
-                              type="button"
-                              onClick={() => handleCopyFNtoAN(worker.staffId)}
-                              title="Copy FN to AN"
-                              disabled={!entry.fnWork}
-                              className="p-1 rounded-lg text-slate-400 hover:text-emerald-700 hover:bg-emerald-50 disabled:opacity-20 transition cursor-pointer"
-                            >
-                              <Copy className="w-3.5 h-3.5" />
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+            {/* GOOGLE SHEET TABULAR VIEW */}
+            {filteredWorkers.length === 0 ? (
+              <div className="bg-white rounded-2xl border-2 border-dashed border-slate-300 p-8 text-center space-y-3">
+                <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
+                  <AlertCircle className="w-6 h-6" />
+                </div>
+                <h3 className="text-sm font-bold text-slate-800">No labours found matching your filter</h3>
+                <p className="text-xs text-slate-500 max-w-md mx-auto">
+                  {filterAttendance === 'Present'
+                    ? `No workers are marked 'Present' for ${date}. In Step 1 Attendance Roll Call, mark present labours to log their work.`
+                    : 'Try clearing the search query or changing trade filter to see labours.'}
+                </p>
+                <div className="flex items-center justify-center gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFilterAttendance('All');
+                      setSearchQuery('');
+                      setFilterDesignation('All');
+                    }}
+                    className="px-3.5 py-1.5 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold shadow-xs transition cursor-pointer"
+                  >
+                    Show All Workers ({workers.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setWorkflowDate(date);
+                      setActiveTab('attendance_entry');
+                    }}
+                    className="px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition cursor-pointer"
+                  >
+                    Go to Step 1: Roll Call
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-emerald-50/90 border-b border-emerald-200 text-emerald-950 font-bold text-[11px] uppercase tracking-wider">
+                        <th className="py-2.5 px-3 border-r border-emerald-200 whitespace-nowrap w-24">Date</th>
+                        <th className="py-2.5 px-2 border-r border-emerald-200 text-center whitespace-nowrap w-12">S.No</th>
+                        <th className="py-2.5 px-3 border-r border-emerald-200 whitespace-nowrap min-w-[200px]">Worker Name</th>
+                        <th className="py-2.5 px-3 border-r border-emerald-200 whitespace-nowrap min-w-[130px]">Category</th>
+                        <th className="py-2.5 px-3 border-r border-emerald-200 min-w-[280px]">Forenoon Work (FN)</th>
+                        <th className="py-2.5 px-3 border-r border-emerald-200 min-w-[280px]">Afternoon Work (AN)</th>
+                        <th className="py-2.5 px-3 border-r border-emerald-200 whitespace-nowrap w-28">Saved Time</th>
+                        <th className="py-2.5 px-2 text-center whitespace-nowrap w-16">Quick</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      {filteredWorkers.map((worker, idx) => {
+                        const entry = entries[worker.staffId] || {
+                          worker,
+                          fnWork: '',
+                          anWork: '',
+                          autoSaved: false,
+                          isSaving: false,
+                          isImprovingFN: false,
+                          isImprovingAN: false,
+                        };
+                        const sNo = workers.findIndex((w) => w.staffId === worker.staffId) + 1;
+                        const savedTimeStr = entry.lastSavedAt || new Date().toLocaleDateString('en-US');
+
+                        return (
+                          <tr
+                            key={`${worker.staffId || worker.id}-sheet-${idx}`}
+                            className="hover:bg-emerald-50/30 transition group"
+                          >
+                            <td className="py-2 px-3 border-r border-slate-200 font-mono text-[11px] text-slate-700 whitespace-nowrap">
+                              {date}
+                            </td>
+                            <td className="py-2 px-2 border-r border-slate-200 text-center font-mono font-bold text-slate-800 text-[11px]">
+                              {sNo}
+                            </td>
+                            <td className="py-2 px-3 border-r border-slate-200">
+                              <div className="font-bold text-slate-900 leading-tight">{worker.name}</div>
+                              <div className="font-mono text-[10px] text-slate-500">{worker.staffId}</div>
+                            </td>
+                            <td className="py-2 px-3 border-r border-slate-200 font-medium text-slate-700 whitespace-nowrap">
+                              <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-800 border border-slate-200 text-[11px]">
+                                {worker.category || worker.designation}
+                              </span>
+                            </td>
+                            <td className="py-1.5 px-2 border-r border-slate-200">
+                              <div className="relative">
+                                <input
+                                  type="text"
+                                  value={entry.fnWork}
+                                  onChange={(e) => handleInputChange(worker.staffId, 'fnWork', e.target.value)}
+                                  placeholder="Enter FN civil tasks..."
+                                  className="w-full text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white"
+                                />
+                                {entry.fnWork && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleImprove(worker.staffId, 'fnWork')}
+                                    disabled={entry.isImprovingFN}
+                                    title="AI Refine description"
+                                    className="absolute right-1.5 top-1.5 p-1 rounded hover:bg-slate-100 text-amber-600 disabled:opacity-50 cursor-pointer"
+                                  >
+                                    <Sparkles className="w-3 h-3" />
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                            <td className="py-1.5 px-2 border-r border-slate-200">
+                              <div className="relative">
+                                <input
+                                  type="text"
+                                  value={entry.anWork}
+                                  onChange={(e) => handleInputChange(worker.staffId, 'anWork', e.target.value)}
+                                  placeholder="Enter AN civil tasks..."
+                                  className="w-full text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white"
+                                />
+                                {entry.anWork && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleImprove(worker.staffId, 'anWork')}
+                                    disabled={entry.isImprovingAN}
+                                    title="AI Refine description"
+                                    className="absolute right-1.5 top-1.5 p-1 rounded hover:bg-slate-100 text-amber-600 disabled:opacity-50 cursor-pointer"
+                                  >
+                                    <Sparkles className="w-3 h-3" />
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                            <td className="py-2 px-3 border-r border-slate-200 font-mono text-[11px] text-slate-500 whitespace-nowrap">
+                              {savedTimeStr}
+                            </td>
+                            <td className="py-2 px-2 text-center whitespace-nowrap">
+                              <button
+                                type="button"
+                                onClick={() => handleCopyFNtoAN(worker.staffId)}
+                                title="Copy FN to AN"
+                                disabled={!entry.fnWork}
+                                className="p-1 rounded-lg text-slate-400 hover:text-emerald-700 hover:bg-emerald-50 disabled:opacity-20 transition cursor-pointer"
+                              >
+                                <Copy className="w-3.5 h-3.5" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )
+      ) : (
+        <>
+          {/* MONTHLY CONTEXT BANNER WHEN CARDS VIEW IS ACTIVE */}
+          {timeFilterMode === 'monthly' && (
+            <div className="bg-gradient-to-r from-teal-900 to-slate-900 text-white rounded-2xl p-4 border border-teal-700/80 shadow-md space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center text-teal-300 shrink-0">
+                    <CalendarRange className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-bold uppercase tracking-wider bg-teal-500/20 text-teal-200 px-2 py-0.5 rounded-full border border-teal-400/30">
+                        Monthly Date Filter
+                      </span>
+                      <span className="text-xs text-slate-300">Viewing Day: {date}</span>
+                    </div>
+                    <h4 className="text-sm font-bold text-white mt-0.5">
+                      {formattedSelectedMonth} — {monthlyDatesWithData.length} Active Days Logged ({monthlyWorklogs.length} Total Logs)
+                    </h4>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setViewMode('sheet')}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-emerald-950 text-xs font-black shadow-xs transition cursor-pointer self-start sm:self-auto"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5" />
+                  <span>Open in Google Sheet Monthly Table</span>
+                </button>
+              </div>
+
+              {/* Day selection chips within the month */}
+              <div className="flex items-center gap-2 overflow-x-auto pt-1 pb-0.5 text-xs">
+                <span className="text-[11px] font-semibold text-teal-200 shrink-0">Select Day:</span>
+                {monthlyDatesWithData.map((d) => {
+                  const isCurrent = date === d.date;
+                  const dateObj = new Date(d.date + 'T12:00:00');
+                  const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'short' });
+                  const formattedD = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+                  return (
+                    <button
+                      key={d.date}
+                      type="button"
+                      onClick={() => {
+                        setDate(d.date);
+                        setWorkflowDate(d.date);
+                      }}
+                      className={`flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-bold transition shrink-0 cursor-pointer border ${
+                        isCurrent
+                          ? 'bg-emerald-400 text-emerald-950 border-emerald-300 shadow-xs'
+                          : 'bg-white/10 hover:bg-white/20 text-white border-white/10'
+                      }`}
+                    >
+                      <span>{formattedD}</span>
+                      <span className="text-[10px] opacity-80 uppercase">({dayName})</span>
+                      <span
+                        className={`text-[9px] font-mono px-1 rounded-full ${
+                          isCurrent ? 'bg-emerald-900 text-white' : 'bg-white/20 text-white'
+                        }`}
+                      >
+                        {d.worklogs}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
-        </div>
-      ) : (
-        <>
+
           {/* FAST ENTRY BANNER */}
           <div className="bg-teal-50/90 border border-teal-200/90 rounded-2xl p-3 px-4 flex flex-wrap items-center justify-between gap-3 text-xs shadow-2xs">
         <div className="flex items-center gap-2">
