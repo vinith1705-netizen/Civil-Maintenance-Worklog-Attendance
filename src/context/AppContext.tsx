@@ -38,6 +38,7 @@ import {
   batchUpdateAttendanceToSheet,
   batchUpdateWorklogToSheet,
   upsertWorklogRowToSheet,
+  extractFNAfternoonWork,
   isGoogleAuthError,
   GoogleAuthExpiredError,
 } from '../services/googleSheets';
@@ -684,8 +685,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         : `FN: ${finalRecord.workDetailsFN} | AN: ${finalRecord.workDetailsAN}`;
     const primaryLocation =
       finalRecord.workPlaceFN === finalRecord.workPlaceAN
-        ? finalRecord.workPlaceFN
-        : `${finalRecord.workPlaceFN} / ${finalRecord.workPlaceAN}`;
+        ? finalRecord.workPlaceFN || ''
+        : [finalRecord.workPlaceFN, finalRecord.workPlaceAN].filter(Boolean).join(' / ');
 
     const worklogEntry: WorklogRecord = {
       id: worklogId,
@@ -700,6 +701,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       status: 'Completed',
       remarks: finalRecord.remarks || `Generated from Attendance #${finalRecord.id}`,
       createdAt: now,
+      workDetailsFN: finalRecord.workDetailsFN || '',
+      workDetailsAN: finalRecord.workDetailsAN || '',
     };
 
     setWorklogs((prev) => {
@@ -819,8 +822,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           : `FN: ${r.workDetailsFN || 'Civil work'} | AN: ${r.workDetailsAN || 'Civil work'}`;
       const location =
         r.workPlaceFN === r.workPlaceAN
-          ? r.workPlaceFN || 'Campus Sites'
-          : `${r.workPlaceFN || 'Campus'} / ${r.workPlaceAN || 'Campus'}`;
+          ? r.workPlaceFN || ''
+          : [r.workPlaceFN, r.workPlaceAN].filter(Boolean).join(' / ');
 
       return {
         id: worklogId,
@@ -835,6 +838,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         status: 'In Progress',
         remarks: r.remarks || `Daily muster roll #${r.id}`,
         createdAt: now,
+        workDetailsFN: r.workDetailsFN || '',
+        workDetailsAN: r.workDetailsAN || '',
       };
     });
 
@@ -909,6 +914,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       recordId = `WL-${cleanDate}-${String(count).padStart(3, '0')}`;
     }
 
+    const { fnWork, anWork } = extractFNAfternoonWork(
+      recordInput.workDetailsFN,
+      recordInput.workDetailsAN,
+      recordInput.workDetails
+    );
+
     const finalRecord: WorklogRecord = {
       date: recordInput.date,
       staffId: recordInput.staffId,
@@ -916,13 +927,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       designation: recordInput.designation,
       workCategory: recordInput.workCategory,
       workLocation: recordInput.workLocation,
-      workDetails: recordInput.workDetails,
+      workDetails: recordInput.workDetails || (fnWork && anWork && fnWork !== anWork ? `FN: ${fnWork} | AN: ${anWork}` : fnWork || anWork || ''),
       session: recordInput.session,
       status: recordInput.status,
       remarks: recordInput.remarks,
       id: recordId,
       createdAt: isEdit ? worklogs.find((w) => w.id === existingId)?.createdAt || now : now,
       syncedToSheet: false,
+      workDetailsFN: fnWork,
+      workDetailsAN: anWork,
     };
 
     let sheetSynced = false;
@@ -933,21 +946,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setWorklogs((prev) => [finalRecord, ...prev]);
     }
 
-    // Keep attendance record in sync so daily reports and other views see the work description
-    let fnWork = recordInput.workDetailsFN;
-    let anWork = recordInput.workDetailsAN;
-
-    if (fnWork === undefined && anWork === undefined && finalRecord.workDetails) {
-      const text = finalRecord.workDetails;
-      if (text.includes('FN:') || text.includes('AN:')) {
-        const fnMatch = text.match(/FN:\s*([^|]+)/i);
-        const anMatch = text.match(/AN:\s*(.+)$/i);
-        if (fnMatch) fnWork = fnMatch[1].trim();
-        if (anMatch) anWork = anMatch[1].trim();
-      } else {
-        fnWork = text;
-      }
-    }
+    // Keep attendance record in sync with pure FN and pure AN so daily reports and other views see the work description
 
     setAttendance((prev) => {
       const existing = prev.find(
@@ -989,8 +988,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         workerName: finalRecord.workerName,
         designation: finalRecord.designation,
         workCategory: finalRecord.workCategory,
-        workPlaceFN: finalRecord.workLocation || 'Campus Sites',
-        workPlaceAN: finalRecord.workLocation || 'Campus Sites',
+        workPlaceFN: finalRecord.workLocation || '',
+        workPlaceAN: finalRecord.workLocation || '',
         workDetailsFN: fnWork || '',
         workDetailsAN: anWork || '',
         attendanceFN: 'Present',
@@ -1337,10 +1336,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               workerName,
               designation,
               workCategory: category,
-              workPlaceFN: mapping.workPlaceFNCol >= 0 ? row[mapping.workPlaceFNCol] || 'Campus' : 'Campus',
+              workPlaceFN: mapping.workPlaceFNCol >= 0 ? row[mapping.workPlaceFNCol] || '' : '',
               workDetailsFN: mapping.workDetailsFNCol >= 0 ? row[mapping.workDetailsFNCol] || '' : '',
               attendanceFN: (mapping.attendanceFNCol >= 0 ? row[mapping.attendanceFNCol] : 'Present') as AttendanceStatus,
-              workPlaceAN: mapping.workPlaceANCol >= 0 ? row[mapping.workPlaceANCol] || 'Campus' : 'Campus',
+              workPlaceAN: mapping.workPlaceANCol >= 0 ? row[mapping.workPlaceANCol] || '' : '',
               workDetailsAN: mapping.workDetailsANCol >= 0 ? row[mapping.workDetailsANCol] || '' : '',
               attendanceAN: (mapping.attendanceANCol >= 0 ? row[mapping.attendanceANCol] : 'Present') as AttendanceStatus,
               calculatedWage: wage,

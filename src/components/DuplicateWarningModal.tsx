@@ -50,21 +50,19 @@ export const DuplicateWarningModal: React.FC<DuplicateWarningModalProps> = ({
             <span className="font-mono text-slate-800">{duplicateRecord.staffId}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-slate-600 font-medium">FN Attendance / Location:</span>
+            <span className="text-slate-600 font-medium">FN Attendance:</span>
             <span className="text-slate-800">
-              <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-medium mr-1">
+              <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-medium">
                 {duplicateRecord.attendanceFN}
               </span>
-              {duplicateRecord.workPlaceFN}
             </span>
           </div>
           <div className="flex justify-between">
-            <span className="text-slate-600 font-medium">AN Attendance / Location:</span>
+            <span className="text-slate-600 font-medium">AN Attendance:</span>
             <span className="text-slate-800">
-              <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-medium mr-1">
+              <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-medium">
                 {duplicateRecord.attendanceAN}
               </span>
-              {duplicateRecord.workPlaceAN}
             </span>
           </div>
           <div className="flex justify-between pt-1 border-t border-amber-200">

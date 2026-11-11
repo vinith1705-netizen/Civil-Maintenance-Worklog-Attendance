@@ -6,8 +6,7 @@ import { AttendanceRecord } from '../../types';
 export const MasonReportView: React.FC = () => {
   const { attendance, showToast } = useApp();
 
-  const [groupBy, setGroupBy] = useState<'None' | 'Worker' | 'Location' | 'Date'>('None');
-  const [filterLocation, setFilterLocation] = useState<string>('All');
+  const [groupBy, setGroupBy] = useState<'None' | 'Worker' | 'Date'>('None');
 
   // Extract all records where Work Category = Mason Work or worker designation contains 'Mason'
   const masonRecords = useMemo(() => {
@@ -18,24 +17,15 @@ export const MasonReportView: React.FC = () => {
         return catMatch || desigMatch;
       })
       .filter((a) => {
-        if (filterLocation === 'All') return true;
-        return a.workPlaceFN === filterLocation || a.workPlaceAN === filterLocation;
+        const catMatch = a.workCategory?.toLowerCase().includes('mason');
+        const desigMatch = a.designation?.toLowerCase().includes('mason');
+        return catMatch || desigMatch;
       })
       .sort((a, b) => (b.date > a.date ? 1 : -1));
-  }, [attendance, filterLocation]);
+  }, [attendance]);
 
   const totalMasonCount = masonRecords.length;
   const totalMasonWages = masonRecords.reduce((sum, r) => sum + (r.wage || 0), 0);
-
-  // Unique locations in mason work
-  const masonLocations = useMemo(() => {
-    const set = new Set<string>();
-    masonRecords.forEach((r) => {
-      if (r.workPlaceFN) set.add(r.workPlaceFN);
-      if (r.workPlaceAN) set.add(r.workPlaceAN);
-    });
-    return Array.from(set).sort();
-  }, [masonRecords]);
 
   // Grouped records
   const groupedData = useMemo(() => {
@@ -45,7 +35,6 @@ export const MasonReportView: React.FC = () => {
     masonRecords.forEach((r) => {
       let key = '';
       if (groupBy === 'Worker') key = `${r.workerName} (${r.staffId})`;
-      else if (groupBy === 'Location') key = r.workPlaceFN || r.workPlaceAN || 'Campus';
       else if (groupBy === 'Date') key = r.date;
 
       if (!map[key]) map[key] = [];
@@ -55,13 +44,12 @@ export const MasonReportView: React.FC = () => {
   }, [masonRecords, groupBy]);
 
   const handleExportCSV = () => {
-    const headers = ['Date', 'Worker', 'Staff ID', 'Designation', 'Location', 'Work Details FN', 'Work Details AN', 'Attendance', 'Wages'];
+    const headers = ['Date', 'Worker', 'Staff ID', 'Designation', 'Work Details FN', 'Work Details AN', 'Attendance', 'Wages'];
     const rows = masonRecords.map((r) => [
       r.date,
       `"${r.workerName}"`,
       `"${r.staffId}"`,
       `"${r.designation}"`,
-      `"${r.workPlaceFN}"`,
       `"${(r.workDetailsFN || '').replace(/"/g, '""')}"`,
       `"${(r.workDetailsAN || '').replace(/"/g, '""')}"`,
       `"${r.attendanceFN}"`,
@@ -117,24 +105,7 @@ export const MasonReportView: React.FC = () => {
             >
               <option value="None">None (Flat Table)</option>
               <option value="Worker">Group by Worker</option>
-              <option value="Location">Group by Location</option>
               <option value="Date">Group by Date</option>
-            </select>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-slate-600">Location Filter:</span>
-            <select
-              value={filterLocation}
-              onChange={(e) => setFilterLocation(e.target.value)}
-              className="px-3 py-1.5 rounded-xl border border-slate-300 bg-white font-medium"
-            >
-              <option value="All">All Locations ({masonLocations.length})</option>
-              {masonLocations.map((loc) => (
-                <option key={loc} value={loc}>
-                  {loc}
-                </option>
-              ))}
             </select>
           </div>
         </div>
@@ -167,7 +138,6 @@ export const MasonReportView: React.FC = () => {
                   <th className="py-3 px-3.5">Date</th>
                   <th className="py-3 px-3.5">Worker</th>
                   <th className="py-3 px-3.5">Designation</th>
-                  <th className="py-3 px-3.5">Location</th>
                   <th className="py-3 px-3.5 min-w-[280px]">Work Details</th>
                   <th className="py-3 px-3.5">Attendance</th>
                   <th className="py-3 px-3.5 text-right">Wages</th>
@@ -186,9 +156,6 @@ export const MasonReportView: React.FC = () => {
                       </span>
                     </td>
                     <td className="py-2.5 px-3.5 text-slate-600 whitespace-nowrap">{r.designation}</td>
-                    <td className="py-2.5 px-3.5 font-medium text-slate-800 whitespace-nowrap">
-                      {r.workPlaceFN}
-                    </td>
                     <td className="py-2.5 px-3.5 text-slate-700 leading-snug">
                       <div className="mb-0.5">{r.workDetailsFN}</div>
                       {r.workDetailsAN && r.workDetailsAN !== r.workDetailsFN && (
@@ -238,7 +205,6 @@ export const MasonReportView: React.FC = () => {
                             <td className="py-2.5 px-4 font-bold text-slate-900 w-48 truncate">
                               {r.workerName}
                             </td>
-                            <td className="py-2.5 px-4 text-slate-600 w-36">{r.workPlaceFN}</td>
                             <td className="py-2.5 px-4 text-slate-700 leading-snug">{r.workDetailsFN}</td>
                             <td className="py-2.5 px-4 text-right font-mono font-bold text-emerald-700 w-20">
                               ₹{r.wage}

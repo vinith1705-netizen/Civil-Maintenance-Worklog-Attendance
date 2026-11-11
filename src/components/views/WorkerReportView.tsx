@@ -47,15 +47,6 @@ export const WorkerReportView: React.FC = () => {
   ).length;
   const totalWagesEarned = workerAttendance.reduce((sum, a) => sum + (a.wage || 0), 0);
 
-  // Locations visited
-  const locationsWorked = useMemo(() => {
-    const locSet = new Set<string>();
-    workerAttendance.forEach((a) => {
-      if (a.workPlaceFN) locSet.add(a.workPlaceFN);
-      if (a.workPlaceAN) locSet.add(a.workPlaceAN);
-    });
-    return Array.from(locSet);
-  }, [workerAttendance]);
 
   // Categories worked
   const categoriesWorked = useMemo(() => {
@@ -171,14 +162,15 @@ export const WorkerReportView: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
               <span className="text-[10px] font-bold uppercase text-slate-500 tracking-wider block mb-2">
-                Work Locations Visited ({locationsWorked.length})
+                Primary Trade & Designation
               </span>
-              <div className="flex flex-wrap gap-1.5">
-                {locationsWorked.map((loc, i) => (
-                  <span key={i} className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold">
-                    {loc}
-                  </span>
-                ))}
+              <div className="flex items-center gap-2">
+                <span className="px-3 py-1.5 rounded-xl bg-slate-100 text-slate-900 text-xs font-bold border border-slate-200">
+                  {currentWorker?.designation}
+                </span>
+                <span className="px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-800 text-xs font-bold border border-emerald-200">
+                  {currentWorker?.category}
+                </span>
               </div>
             </div>
 
@@ -211,7 +203,7 @@ export const WorkerReportView: React.FC = () => {
                   <tr>
                     <th className="py-3 px-3.5">Date</th>
                     <th className="py-3 px-3.5">Record ID</th>
-                    <th className="py-3 px-3.5">Work Place (FN / AN)</th>
+                    <th className="py-3 px-3.5">Category</th>
                     <th className="py-3 px-3.5">Work Details</th>
                     <th className="py-3 px-3.5">FN Status</th>
                     <th className="py-3 px-3.5">AN Status</th>
@@ -234,11 +226,8 @@ export const WorkerReportView: React.FC = () => {
                         <td className="py-3 px-3.5 font-mono text-slate-500 text-[11px] whitespace-nowrap">
                           {rec.id}
                         </td>
-                        <td className="py-3 px-3.5 font-semibold text-slate-900">
-                          {rec.workPlaceFN}
-                          {rec.workPlaceAN && rec.workPlaceAN !== rec.workPlaceFN && (
-                            <span className="text-slate-500 font-normal"> / {rec.workPlaceAN}</span>
-                          )}
+                        <td className="py-3 px-3.5 font-semibold text-slate-900 whitespace-nowrap">
+                          {rec.workCategory || currentWorker?.category || 'Civil Maintenance'}
                         </td>
                         <td className="py-3 px-3.5 text-slate-700 max-w-md">
                           <div className="leading-snug">

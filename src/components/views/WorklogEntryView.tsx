@@ -27,7 +27,7 @@ import { useApp } from '../../context/AppContext';
 import { getTodayDateString } from '../../data/seedData';
 import { WorkerRecord, WorklogRecord, AttendanceRecord } from '../../types';
 import { improveWorkDescription } from '../../services/gemini';
-import { batchUpdateWorklogToSheet, isGoogleAuthError } from '../../services/googleSheets';
+import { batchUpdateWorklogToSheet, isGoogleAuthError, extractFNAfternoonWork } from '../../services/googleSheets';
 
 interface WorkerWorklogState {
   worker: WorkerRecord;
@@ -124,18 +124,16 @@ export const WorklogEntryView: React.FC = () => {
           }
         }
 
-        // Priority 2: If details are still blank, check Worklog record
-        if ((!fn || !an) && existingLog?.workDetails) {
-          const details = existingLog.workDetails;
-          if (details.includes('FN:') || details.includes('AN:')) {
-            const fnMatch = details.match(/FN:\s*([^|]+)/i);
-            const anMatch = details.match(/AN:\s*(.+)$/i);
-            if (!fn && fnMatch) fn = fnMatch[1].trim();
-            if (!an && anMatch) an = anMatch[1].trim();
-          } else if (!fn) {
-            fn = details;
-          }
+        // Priority 2: Check Worklog record
+        if ((!fn || !an) && existingLog) {
+          if (existingLog.workDetailsFN && !fn) fn = existingLog.workDetailsFN;
+          if (existingLog.workDetailsAN && !an) an = existingLog.workDetailsAN;
         }
+
+        // Clean & extract pure FN and AN without cross-pollination or "FN:" / "AN:" prefixes
+        const extracted = extractFNAfternoonWork(fn, an, existingLog?.workDetails);
+        fn = extracted.fnWork;
+        an = extracted.anWork;
 
         if (isLegacySeedPlaceholder(fn)) fn = '';
         if (isLegacySeedPlaceholder(an)) an = '';
@@ -167,10 +165,9 @@ export const WorklogEntryView: React.FC = () => {
       const worker = workers.find((w) => w.staffId === staffId);
       if (!worker) return;
 
-      const fn = fnText.trim();
-      const an = anText.trim();
+      const { fnWork: fn, anWork: an } = extractFNAfternoonWork(fnText, anText);
 
-      const combinedDetails = fn && an ? `FN: ${fn} | AN: ${an}` : fn || an || '';
+      const combinedDetails = fn && an && fn !== an ? `FN: ${fn} | AN: ${an}` : fn || an || '';
       const cleanDate = date.replace(/-/g, '');
       const worklogId = `WL-${cleanDate}-${staffId.replace(/[^a-zA-Z0-9]/g, '')}`;
 
@@ -182,7 +179,7 @@ export const WorklogEntryView: React.FC = () => {
             workerName: worker.name,
             designation: worker.designation,
             workCategory: worker.category || 'Civil Maintenance',
-            workLocation: 'Campus Sites',
+            workLocation: '',
             workDetails: combinedDetails,
             session: fn && an ? 'Full Day' : fn ? 'Forenoon' : 'Afternoon',
             status: 'Completed',
@@ -346,6 +343,8 @@ export const WorklogEntryView: React.FC = () => {
         // Exclude absent workers from the Worklog tab (Only present workers get daily worklog entries)
         if (!isPresent) continue;
 
+        const { fnWork: fnPure, anWork: anPure } = extractFNAfternoonWork(fn, an);
+
         recordsToSync.push({
           id: existingAtt?.id || `CMWL-${date.replace(/-/g, '')}-${worker.staffId}`,
           date,
@@ -353,8 +352,8 @@ export const WorklogEntryView: React.FC = () => {
           workerName: worker.name,
           designation: worker.designation,
           workCategory: worker.category || 'Civil Maintenance',
-          workDetailsFN: fn || '',
-          workDetailsAN: an || '',
+          workDetailsFN: fnPure,
+          workDetailsAN: anPure,
           attendanceFN: existingAtt?.attendanceFN || 'Present',
           attendanceAN: existingAtt?.attendanceAN || 'Present',
           createdAt: new Date().toISOString(),
@@ -404,13 +403,14 @@ export const WorklogEntryView: React.FC = () => {
     const rows = filteredWorkers.map((w, idx) => {
       const entry = entries[w.staffId];
       const sNo = sNoMap.get(w.staffId.toLowerCase()) || idx + 1;
+      const { fnWork, anWork } = extractFNAfternoonWork(entry?.fnWork, entry?.anWork);
       return [
         date,
         sNo,
         `"${w.name}"`,
         `"${w.category || w.designation || 'Civil Maintenance'}"`,
-        `"${(entry?.fnWork || '').replace(/"/g, '""')}"`,
-        `"${(entry?.anWork || '').replace(/"/g, '""')}"`,
+        `"${fnWork.replace(/"/g, '""')}"`,
+        `"${anWork.replace(/"/g, '""')}"`,
         `"${nowStr}"`,
       ];
     });

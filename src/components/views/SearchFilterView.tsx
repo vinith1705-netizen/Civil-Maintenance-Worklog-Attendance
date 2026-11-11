@@ -14,7 +14,7 @@ import { useApp } from '../../context/AppContext';
 import { AttendanceRecord, AttendanceStatus } from '../../types';
 
 export const SearchFilterView: React.FC = () => {
-  const { attendance, workers, locations, categories, showToast } = useApp();
+  const { attendance, workers, categories, showToast } = useApp();
 
   // Filters
   const [dateFrom, setDateFrom] = useState('');
@@ -23,7 +23,6 @@ export const SearchFilterView: React.FC = () => {
   const [workerNameFilter, setWorkerNameFilter] = useState('');
   const [designationFilter, setDesignationFilter] = useState('All');
   const [categoryFilter, setCategoryFilter] = useState('All');
-  const [locationFilter, setLocationFilter] = useState('All');
   const [attendanceFilter, setAttendanceFilter] = useState<string>('All');
   const [statusFilter, setStatusFilter] = useState<string>('All');
 
@@ -40,10 +39,6 @@ export const SearchFilterView: React.FC = () => {
       if (workerNameFilter && !rec.workerName.toLowerCase().includes(workerNameFilter.toLowerCase())) return false;
       if (designationFilter !== 'All' && rec.designation !== designationFilter) return false;
       if (categoryFilter !== 'All' && rec.workCategory !== categoryFilter) return false;
-      if (locationFilter !== 'All') {
-        const matchesLoc = rec.workPlaceFN === locationFilter || rec.workPlaceAN === locationFilter;
-        if (!matchesLoc) return false;
-      }
       if (attendanceFilter !== 'All') {
         const matchesAtt = rec.attendanceFN === attendanceFilter || rec.attendanceAN === attendanceFilter;
         if (!matchesAtt) return false;
@@ -59,7 +54,6 @@ export const SearchFilterView: React.FC = () => {
     workerNameFilter,
     designationFilter,
     categoryFilter,
-    locationFilter,
     attendanceFilter,
     statusFilter,
   ]);
@@ -91,7 +85,6 @@ export const SearchFilterView: React.FC = () => {
     setWorkerNameFilter('');
     setDesignationFilter('All');
     setCategoryFilter('All');
-    setLocationFilter('All');
     setAttendanceFilter('All');
     setStatusFilter('All');
   };
@@ -109,8 +102,6 @@ export const SearchFilterView: React.FC = () => {
       'Staff ID',
       'Worker',
       'Designation',
-      'Work Place FN',
-      'Work Place AN',
       'Work Category',
       'Work Details FN',
       'Work Details AN',
@@ -124,8 +115,6 @@ export const SearchFilterView: React.FC = () => {
       `"${r.staffId}"`,
       `"${r.workerName}"`,
       `"${r.designation}"`,
-      `"${r.workPlaceFN}"`,
-      `"${r.workPlaceAN}"`,
       `"${r.workCategory}"`,
       `"${(r.workDetailsFN || '').replace(/"/g, '""')}"`,
       `"${(r.workDetailsAN || '').replace(/"/g, '""')}"`,
@@ -274,23 +263,6 @@ export const SearchFilterView: React.FC = () => {
             </select>
           </div>
 
-          {/* Location */}
-          <div>
-            <label className="block font-semibold text-slate-600 mb-1">Work Location</label>
-            <select
-              value={locationFilter}
-              onChange={(e) => setLocationFilter(e.target.value)}
-              className="w-full p-2 border border-slate-300 rounded-xl"
-            >
-              <option value="All">All Locations</option>
-              {locations.map((l) => (
-                <option key={l.id} value={l.name}>
-                  {l.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
           {/* Attendance */}
           <div>
             <label className="block font-semibold text-slate-600 mb-1">Attendance Status</label>
@@ -364,15 +336,6 @@ export const SearchFilterView: React.FC = () => {
                   </div>
                 </th>
                 <th
-                  onClick={() => handleSort('workPlaceFN')}
-                  className="py-3 px-3 cursor-pointer hover:bg-slate-100 transition whitespace-nowrap"
-                >
-                  <div className="flex items-center gap-1">
-                    <span>Work Place</span>
-                    <ArrowUpDown className="w-3 h-3 text-slate-400" />
-                  </div>
-                </th>
-                <th
                   onClick={() => handleSort('workCategory')}
                   className="py-3 px-3 cursor-pointer hover:bg-slate-100 transition whitespace-nowrap"
                 >
@@ -397,7 +360,7 @@ export const SearchFilterView: React.FC = () => {
             <tbody className="divide-y divide-slate-100">
               {sortedRecords.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-10 text-center text-slate-400 text-xs">
+                  <td colSpan={8} className="py-10 text-center text-slate-400 text-xs">
                     No records match the selected filters.
                   </td>
                 </tr>
@@ -414,12 +377,6 @@ export const SearchFilterView: React.FC = () => {
                       {r.workerName}
                     </td>
                     <td className="py-2.5 px-3 text-slate-600 whitespace-nowrap">{r.designation}</td>
-                    <td className="py-2.5 px-3 text-slate-800 whitespace-nowrap">
-                      <span className="font-semibold text-slate-900">{r.workPlaceFN}</span>
-                      {r.workPlaceAN && r.workPlaceAN !== r.workPlaceFN && (
-                        <span className="text-slate-500"> / {r.workPlaceAN}</span>
-                      )}
-                    </td>
                     <td className="py-2.5 px-3 text-slate-600 whitespace-nowrap">{r.workCategory}</td>
                     <td className="py-2.5 px-3 text-slate-700 max-w-sm">
                       <div className="leading-snug line-clamp-2" title={`FN: ${r.workDetailsFN} | AN: ${r.workDetailsAN}`}>

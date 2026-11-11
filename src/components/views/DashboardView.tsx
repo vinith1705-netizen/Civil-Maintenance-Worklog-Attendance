@@ -63,15 +63,6 @@ export const DashboardView: React.FC = () => {
 
   const totalWagesToday = todayAttendance.reduce((sum, a) => sum + (a.wage || 0), 0);
 
-  // Unique active locations today
-  const activeLocationsToday = useMemo(() => {
-    const locSet = new Set<string>();
-    todayAttendance.forEach((a) => {
-      if (a.workPlaceFN) locSet.add(a.workPlaceFN);
-      if (a.workPlaceAN) locSet.add(a.workPlaceAN);
-    });
-    return Array.from(locSet).filter(Boolean);
-  }, [todayAttendance]);
 
   // Category counts today
   const getCategoryCount = (categoryName: string) => {
@@ -120,27 +111,6 @@ export const DashboardView: React.FC = () => {
     );
   }).length;
 
-  // Location wise summary
-  const locationBreakdown = useMemo(() => {
-    const counts: Record<string, { count: number; workers: Set<string>; wage: number }> = {};
-    todayAttendance.forEach((a) => {
-      const loc = a.workPlaceFN || a.workPlaceAN || 'Campus';
-      if (!counts[loc]) {
-        counts[loc] = { count: 0, workers: new Set(), wage: 0 };
-      }
-      counts[loc].count += 1;
-      counts[loc].workers.add(a.workerName);
-      counts[loc].wage += a.wage || 0;
-    });
-
-    return Object.entries(counts)
-      .map(([name, data]) => ({
-        location: name,
-        workerCount: data.workers.size,
-        totalWage: data.wage,
-      }))
-      .sort((a, b) => b.workerCount - a.workerCount);
-  }, [todayAttendance]);
 
   // Monthly summary calculations (current month)
   const currentMonth = selectedDate.substring(0, 7); // YYYY-MM
@@ -199,8 +169,8 @@ export const DashboardView: React.FC = () => {
         </div>
       </div>
 
-      {/* 12 Dashboard Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5">
+      {/* Dashboard KPI Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
         {/* 1. Total Workers */}
         <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs hover:border-slate-300 transition">
           <div className="flex items-center justify-between text-slate-500 mb-2">
@@ -255,18 +225,6 @@ export const DashboardView: React.FC = () => {
             ₹{totalWagesToday.toLocaleString('en-IN')}
           </div>
           <div className="text-[10px] text-amber-600 mt-1">Daily civil payroll</div>
-        </div>
-
-        {/* 6. Total Work Locations */}
-        <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs">
-          <div className="flex items-center justify-between text-slate-500 mb-2">
-            <span className="text-[11px] font-semibold uppercase">Work Sites</span>
-            <MapPin className="w-4 h-4 text-rose-600" />
-          </div>
-          <div className="text-2xl font-extrabold text-slate-900">
-            {activeLocationsToday.length}
-          </div>
-          <div className="text-[10px] text-slate-500 mt-1">Active hostels & sheds</div>
         </div>
       </div>
 
@@ -413,7 +371,7 @@ export const DashboardView: React.FC = () => {
                       <th className="py-2.5 px-3">Staff ID</th>
                       <th className="py-2.5 px-3">Worker Name</th>
                       <th className="py-2.5 px-3">Designation</th>
-                      <th className="py-2.5 px-3">Location (FN / AN)</th>
+                      <th className="py-2.5 px-3">Category</th>
                       <th className="py-2.5 px-3">Status</th>
                       <th className="py-2.5 px-3 text-right">Wage</th>
                     </tr>
@@ -429,10 +387,9 @@ export const DashboardView: React.FC = () => {
                         </td>
                         <td className="py-2.5 px-3 text-slate-600">{rec.designation}</td>
                         <td className="py-2.5 px-3 text-slate-700">
-                          <span className="font-medium text-slate-900">{rec.workPlaceFN}</span>
-                          {rec.workPlaceAN && rec.workPlaceAN !== rec.workPlaceFN && (
-                            <span className="text-slate-500"> / {rec.workPlaceAN}</span>
-                          )}
+                          <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-800 text-xs font-medium border border-slate-200">
+                            {rec.workCategory || 'Civil Maintenance'}
+                          </span>
                         </td>
                         <td className="py-2.5 px-3">
                           <span
@@ -499,8 +456,8 @@ export const DashboardView: React.FC = () => {
                         </span>
                         <span className="text-[10px] text-slate-500">• {wl.designation}</span>
                       </div>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
-                        {wl.workLocation}
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
+                        {wl.workCategory || 'Civil Maintenance'}
                       </span>
                     </div>
                     <p className="text-xs text-slate-700 leading-relaxed font-normal">
@@ -520,10 +477,10 @@ export const DashboardView: React.FC = () => {
 
         {/* Right Col: Location summary, Category summary & Monthly Payroll preview */}
         <div className="space-y-6">
-          {/* Location-wise Manpower Card */}
+          {/* Trade Category Deployment Card */}
           <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-5">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="font-bold text-slate-900 text-sm">Site-wise Deployment</h3>
+              <h3 className="font-bold text-slate-900 text-sm">Trade Deployment</h3>
               <button
                 onClick={() => setActiveTab('daily_report')}
                 className="text-[11px] font-semibold text-amber-700 hover:underline cursor-pointer"
@@ -531,31 +488,47 @@ export const DashboardView: React.FC = () => {
                 Daily report
               </button>
             </div>
-            {locationBreakdown.length === 0 ? (
-              <div className="text-xs text-slate-400 py-4 text-center">
-                No location deployments recorded today.
-              </div>
-            ) : (
-              <div className="space-y-2.5">
-                {locationBreakdown.slice(0, 5).map((loc, idx) => (
-                  <div
-                    key={idx}
-                    className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100"
-                  >
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full bg-amber-500" />
-                      <span className="text-xs font-semibold text-slate-800">{loc.location}</span>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-xs font-bold text-slate-900">
-                        {loc.workerCount} workers
-                      </div>
-                      <div className="text-[10px] text-slate-500">₹{loc.totalWage}</div>
-                    </div>
+            <div className="space-y-2.5">
+              {[
+                {
+                  name: 'Mason Work',
+                  color: 'bg-amber-500',
+                  count: todayAttendance.filter((a) => {
+                    const c = (a.workCategory || a.designation || '').toLowerCase();
+                    return c.includes('mason') || c.includes('helper') || c.includes('mazdoor');
+                  }).length,
+                },
+                {
+                  name: 'Carpentry Work',
+                  color: 'bg-blue-500',
+                  count: todayAttendance.filter((a) => {
+                    const c = (a.workCategory || a.designation || '').toLowerCase();
+                    return c.includes('carpent') || c.includes('polish');
+                  }).length,
+                },
+                {
+                  name: 'Welding Work',
+                  color: 'bg-rose-500',
+                  count: todayAttendance.filter((a) => {
+                    const c = (a.workCategory || a.designation || '').toLowerCase();
+                    return c.includes('weld');
+                  }).length,
+                },
+              ].map((cat, idx) => (
+                <div
+                  key={idx}
+                  className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100"
+                >
+                  <div className="flex items-center gap-2">
+                    <div className={`w-2.5 h-2.5 rounded-full ${cat.color}`} />
+                    <span className="text-xs font-semibold text-slate-800">{cat.name}</span>
                   </div>
-                ))}
-              </div>
-            )}
+                  <div className="text-right">
+                    <span className="text-xs font-bold text-slate-900">{cat.count} workers</span>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
 
           {/* Monthly Payroll & Man-days preview */}

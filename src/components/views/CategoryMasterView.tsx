@@ -1020,7 +1020,7 @@ export const CategoryMasterView: React.FC = () => {
                   <tr>
                     <th className="py-3 px-3">Ticket ID</th>
                     <th className="py-3 px-3">Work Category</th>
-                    <th className="py-3 px-3">Campus Site</th>
+                    <th className="py-3 px-3">Work Area</th>
                     <th className="py-3 px-3">Issue Description</th>
                     <th className="py-3 px-3">Assigned Specialist</th>
                     <th className="py-3 px-3">Priority</th>

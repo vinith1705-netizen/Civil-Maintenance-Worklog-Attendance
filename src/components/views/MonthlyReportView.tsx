@@ -173,17 +173,6 @@ export const MonthlyReportView: React.FC = () => {
     return Object.entries(map).sort((a, b) => b[1].wages - a[1].wages);
   }, [monthRecords]);
 
-  // Location Totals
-  const locationTotals = useMemo(() => {
-    const map: Record<string, { count: number; wages: number }> = {};
-    monthRecords.forEach((r) => {
-      const loc = r.workPlaceFN || r.workPlaceAN || 'Campus';
-      if (!map[loc]) map[loc] = { count: 0, wages: 0 };
-      map[loc].count += 1;
-      map[loc].wages += r.wage || 0;
-    });
-    return Object.entries(map).sort((a, b) => b[1].count - a[1].count);
-  }, [monthRecords]);
 
   // Worker-wise Totals
   const workerTotals = useMemo(() => {
@@ -239,10 +228,10 @@ export const MonthlyReportView: React.FC = () => {
       .sort((a, b) => b.totalWages - a.totalWages);
   }, [workers, monthRecords]);
 
-  // Active tab inside monthly report: 'worklogs' | 'wages' | 'categories' | 'sites'
-  const [activeTabMode, setActiveTabMode] = useState<'worklogs' | 'wages' | 'categories' | 'sites'>('worklogs');
+  // Active tab inside monthly report: 'worklogs' | 'wages' | 'categories'
+  const [activeTabMode, setActiveTabMode] = useState<'worklogs' | 'wages' | 'categories'>('worklogs');
 
-  // 1. Comprehensive Work Monthly Report CSV (All daily tasks, sites, workers, and attendance for the month)
+  // 1. Comprehensive Work Monthly Report CSV (All daily tasks, workers, and attendance for the month)
   const handleExportWorkMonthlyReportCSV = () => {
     const monthLabel = `${monthNames[selectedMonth - 1]} ${selectedYear}`;
     const lines: string[] = [];
@@ -276,7 +265,7 @@ export const MonthlyReportView: React.FC = () => {
 
     // Detailed Daily Worklogs & Attendance Table
     lines.push('"--- DETAILED DAILY WORKLOG & ATTENDANCE REGISTER ---"');
-    lines.push('"Date","S.No","Staff ID","Worker Name","Designation","Category","FN Campus Site","FN Work Details & Tasks","FN Status","AN Campus Site","AN Work Details & Tasks","AN Status","Daily Wage (₹)","Approval Status"');
+    lines.push('"Date","S.No","Staff ID","Worker Name","Designation","Category","FN Work Details & Tasks","FN Status","AN Work Details & Tasks","AN Status","Daily Wage (₹)","Approval Status"');
 
     const sortedRecords = [...monthRecords].sort(
       (a, b) => a.date.localeCompare(b.date) || a.staffId.localeCompare(b.staffId)
@@ -294,10 +283,8 @@ export const MonthlyReportView: React.FC = () => {
             `"${r.workerName}"`,
             `"${r.designation}"`,
             `"${r.workCategory || 'Mason Work'}"`,
-            `"${r.workPlaceFN || '-'}"`,
             `"${(r.workDetailsFN || '').replace(/"/g, '""')}"`,
             `"${r.attendanceFN}"`,
-            `"${r.workPlaceAN || '-'}"`,
             `"${(r.workDetailsAN || '').replace(/"/g, '""')}"`,
             `"${r.attendanceAN}"`,
             r.wage || 0,
@@ -575,17 +562,6 @@ export const MonthlyReportView: React.FC = () => {
           <span>Work Categories & Complaints (3 Trades)</span>
         </button>
 
-        <button
-          onClick={() => setActiveTabMode('sites')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
-            activeTabMode === 'sites'
-              ? 'bg-amber-600 text-white shadow-sm'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <MapPin className="w-3.5 h-3.5" />
-          <span>Campus Sites Deployed ({locationTotals.length})</span>
-        </button>
       </div>
 
       {/* TAB 1: DAILY WORK TASKS LOG FOR THE MONTH */}
@@ -595,10 +571,10 @@ export const MonthlyReportView: React.FC = () => {
             <div>
               <h4 className="font-black text-sm text-slate-900 uppercase tracking-wide flex items-center gap-2">
                 <FileText className="w-4 h-4 text-amber-600" />
-                <span>Daily Work Tasks & Site Log ({monthNames[selectedMonth - 1]} {selectedYear})</span>
+                <span>Daily Work Tasks & Worklog ({monthNames[selectedMonth - 1]} {selectedYear})</span>
               </h4>
               <p className="text-xs text-slate-500">
-                Detailed record of tasks performed, site allocations, and wages for each day of the month.
+                Detailed record of tasks performed, trade allocations, and wages for each day of the month.
               </p>
             </div>
 
@@ -619,9 +595,7 @@ export const MonthlyReportView: React.FC = () => {
                   <th className="py-2.5 px-3">Staff ID</th>
                   <th className="py-2.5 px-3">Worker Name</th>
                   <th className="py-2.5 px-3">Category</th>
-                  <th className="py-2.5 px-3">FN Campus Site</th>
                   <th className="py-2.5 px-3">FN Work Details</th>
-                  <th className="py-2.5 px-3">AN Campus Site</th>
                   <th className="py-2.5 px-3">AN Work Details</th>
                   <th className="py-2.5 px-3 text-center">Attendance</th>
                   <th className="py-2.5 px-3 text-right">Wage (₹)</th>
@@ -630,7 +604,7 @@ export const MonthlyReportView: React.FC = () => {
               <tbody className="divide-y divide-slate-100">
                 {sortedMonthRecords.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="py-8 text-center text-slate-400">
+                    <td colSpan={8} className="py-8 text-center text-slate-400">
                       No daily work records found for {monthNames[selectedMonth - 1]} {selectedYear}.
                     </td>
                   </tr>
@@ -643,11 +617,9 @@ export const MonthlyReportView: React.FC = () => {
                       <td className="py-2 px-3 font-mono font-bold text-slate-800">{r.staffId}</td>
                       <td className="py-2 px-3 font-medium text-slate-900 whitespace-nowrap">{r.workerName}</td>
                       <td className="py-2 px-3 text-slate-600">{r.workCategory || 'Mason Work'}</td>
-                      <td className="py-2 px-3 text-slate-700 whitespace-nowrap">{r.workPlaceFN || '-'}</td>
                       <td className="py-2 px-3 text-slate-600 max-w-xs truncate" title={r.workDetailsFN}>
                         {r.workDetailsFN || '-'}
                       </td>
-                      <td className="py-2 px-3 text-slate-700 whitespace-nowrap">{r.workPlaceAN || '-'}</td>
                       <td className="py-2 px-3 text-slate-600 max-w-xs truncate" title={r.workDetailsAN}>
                         {r.workDetailsAN || '-'}
                       </td>
@@ -885,42 +857,6 @@ export const MonthlyReportView: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 4: CAMPUS SITES DEPLOYED */}
-      {activeTabMode === 'sites' && (
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-            <div>
-              <h3 className="font-bold text-base text-slate-900 flex items-center gap-2">
-                <MapPin className="w-4 h-4 text-amber-600" />
-                <span>Campus Sites Deployed in {monthNames[selectedMonth - 1]} {selectedYear}</span>
-              </h3>
-              <p className="text-xs text-slate-500">
-                Manpower task distribution and cumulative wages by campus hostel, department, and site.
-              </p>
-            </div>
-            <span className="text-xs font-mono font-bold text-slate-600 bg-slate-100 px-2.5 py-1 rounded-lg">
-              {locationTotals.length} Active Sites
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {locationTotals.map(([loc, data], i) => (
-              <div key={i} className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-slate-50 transition">
-                <div className="flex justify-between items-start">
-                  <span className="font-bold text-sm text-slate-900">{loc}</span>
-                  <span className="px-2 py-0.5 rounded text-[10px] font-black bg-amber-100 text-amber-800 font-mono">
-                    {data.count} logs
-                  </span>
-                </div>
-                <div className="mt-2 pt-2 border-t border-slate-200/60 flex justify-between text-xs text-slate-600">
-                  <span>Wages Disbursed:</span>
-                  <span className="font-mono font-bold text-slate-900">₹{data.wages.toLocaleString('en-IN')}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* OFFICIAL INSTITUTIONAL PRINT FOOTER (Visible on print) */}
       <div className="hidden print:block space-y-4 pt-8 border-t-2 border-slate-900 text-slate-900">

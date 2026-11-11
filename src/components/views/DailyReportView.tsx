@@ -41,25 +41,6 @@ export const DailyReportView: React.FC = () => {
   ).length;
   const totalWages = dayRecords.reduce((sum, r) => sum + (r.wage || 0), 0);
 
-  // 3. Location-wise Work Summary
-  const locationBreakdown = useMemo(() => {
-    const map: Record<string, { workers: Set<string>; tasks: string[]; wage: number }> = {};
-    dayRecords.forEach((r) => {
-      const loc = r.workPlaceFN || r.workPlaceAN || 'Campus';
-      if (!map[loc]) {
-        map[loc] = { workers: new Set(), tasks: [], wage: 0 };
-      }
-      map[loc].workers.add(r.workerName);
-      if (r.workDetailsFN) map[loc].tasks.push(`${r.workerName}: ${r.workDetailsFN}`);
-      map[loc].wage += r.wage || 0;
-    });
-    return Object.entries(map).map(([loc, data]) => ({
-      location: loc,
-      workerCount: data.workers.size,
-      tasks: data.tasks,
-      wage: data.wage,
-    }));
-  }, [dayRecords]);
 
   // 4. Category-wise Work Summary
   const categoryBreakdown = useMemo(() => {
@@ -208,9 +189,10 @@ export const DailyReportView: React.FC = () => {
                 <th className="py-2 px-3 border-r border-slate-200">S.No</th>
                 <th className="py-2 px-3 border-r border-slate-200">Staff ID</th>
                 <th className="py-2 px-3 border-r border-slate-200">Worker Name</th>
-                <th className="py-2 px-3 border-r border-slate-200">Designation</th>
-                <th className="py-2 px-3 border-r border-slate-200">FN Location & Status</th>
-                <th className="py-2 px-3 border-r border-slate-200">AN Location & Status</th>
+                <th className="py-2 px-3 border-r border-slate-200">Category</th>
+                <th className="py-2 px-3 border-r border-slate-200 text-center">FN Status</th>
+                <th className="py-2 px-3 border-r border-slate-200 text-center">AN Status</th>
+                <th className="py-2 px-3 border-r border-slate-200">Work Details</th>
                 <th className="py-2 px-3 text-right">Wage (₹)</th>
               </tr>
             </thead>
@@ -222,12 +204,21 @@ export const DailyReportView: React.FC = () => {
                     {r.staffId}
                   </td>
                   <td className="py-1.5 px-3 border-r border-slate-200 font-semibold">{r.workerName}</td>
-                  <td className="py-1.5 px-3 border-r border-slate-200 text-slate-600">{r.designation}</td>
-                  <td className="py-1.5 px-3 border-r border-slate-200">
-                    <span className="font-semibold">{r.workPlaceFN}</span> ({r.attendanceFN})
+                  <td className="py-1.5 px-3 border-r border-slate-200 text-slate-600">{r.workCategory || r.designation}</td>
+                  <td className="py-1.5 px-3 border-r border-slate-200 text-center font-semibold">
+                    <span className={r.attendanceFN === 'Present' ? 'text-emerald-700 font-bold' : r.attendanceFN === 'Absent' ? 'text-rose-700 font-bold' : 'text-amber-700 font-bold'}>
+                      {r.attendanceFN}
+                    </span>
                   </td>
-                  <td className="py-1.5 px-3 border-r border-slate-200">
-                    <span className="font-semibold">{r.workPlaceAN}</span> ({r.attendanceAN})
+                  <td className="py-1.5 px-3 border-r border-slate-200 text-center font-semibold">
+                    <span className={r.attendanceAN === 'Present' ? 'text-emerald-700 font-bold' : r.attendanceAN === 'Absent' ? 'text-rose-700 font-bold' : 'text-amber-700 font-bold'}>
+                      {r.attendanceAN}
+                    </span>
+                  </td>
+                  <td className="py-1.5 px-3 border-r border-slate-200 text-slate-700 text-[11px] max-w-xs truncate">
+                    {r.workDetailsFN && `FN: ${r.workDetailsFN}`}
+                    {r.workDetailsAN && r.workDetailsAN !== r.workDetailsFN ? ` | AN: ${r.workDetailsAN}` : ''}
+                    {!r.workDetailsFN && !r.workDetailsAN && <span className="text-slate-400 italic">No notes</span>}
                   </td>
                   <td className="py-1.5 px-3 text-right font-mono font-bold">{r.wage}</td>
                 </tr>
@@ -236,39 +227,11 @@ export const DailyReportView: React.FC = () => {
           </table>
         </section>
 
-        {/* SECTION 3: LOCATION-WISE WORK */}
+        {/* SECTION 3: CATEGORY-WISE WORK */}
         <section className="space-y-3">
           <div className="flex items-center gap-2 border-b border-slate-300 pb-1">
             <span className="w-5 h-5 rounded bg-slate-900 text-white text-xs font-bold flex items-center justify-center">
               3
-            </span>
-            <h3 className="font-bold text-sm uppercase tracking-wide text-slate-900">
-              Location-wise Work Distribution
-            </h3>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {locationBreakdown.map((loc, i) => (
-              <div key={i} className="p-3 rounded-lg border border-slate-200 bg-slate-50/50 space-y-1.5 text-xs">
-                <div className="flex justify-between items-center font-bold">
-                  <span className="text-amber-800">{loc.location}</span>
-                  <span className="text-slate-600">{loc.workerCount} Workers | ₹{loc.wage}</span>
-                </div>
-                <div className="text-[11px] text-slate-600 space-y-0.5">
-                  {loc.tasks.slice(0, 3).map((t, idx) => (
-                    <div key={idx} className="truncate">• {t}</div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* SECTION 4: CATEGORY-WISE WORK */}
-        <section className="space-y-3">
-          <div className="flex items-center gap-2 border-b border-slate-300 pb-1">
-            <span className="w-5 h-5 rounded bg-slate-900 text-white text-xs font-bold flex items-center justify-center">
-              4
             </span>
             <h3 className="font-bold text-sm uppercase tracking-wide text-slate-900">
               Category-wise Work Allocation
@@ -279,18 +242,18 @@ export const DailyReportView: React.FC = () => {
             {categoryBreakdown.map(([cat, data], i) => (
               <div key={i} className="px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50 flex items-center gap-2">
                 <span className="font-semibold text-slate-900">{cat}:</span>
-                <span className="font-bold text-amber-700">{data.count} tasks</span>
+                <span className="font-bold text-amber-700">{data.count} workers</span>
                 <span className="text-[10px] text-slate-500 font-mono">(₹{data.wage})</span>
               </div>
             ))}
           </div>
         </section>
 
-        {/* SECTIONS 5 - 7: SPECIFIC TRADES BREAKDOWN (Mason, Carpentry, Welding) */}
+        {/* SECTIONS 4 - 6: SPECIFIC TRADES BREAKDOWN (Mason, Carpentry, Welding) */}
         {[
-          { num: 5, title: 'Mason Work', list: masonRecords },
-          { num: 6, title: 'Carpentry Work', list: carpenterRecords },
-          { num: 7, title: 'Welding Work', list: weldingRecords },
+          { num: 4, title: 'Mason Work', list: masonRecords },
+          { num: 5, title: 'Carpentry Work', list: carpenterRecords },
+          { num: 6, title: 'Welding Work', list: weldingRecords },
         ].map((sec) => (
           <section key={sec.num} className="space-y-2">
             <div className="flex items-center justify-between border-b border-slate-300 pb-1">
@@ -311,7 +274,7 @@ export const DailyReportView: React.FC = () => {
                 <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase text-[9px] font-bold">
                   <tr>
                     <th className="py-1.5 px-3 border-r border-slate-200">Worker</th>
-                    <th className="py-1.5 px-3 border-r border-slate-200">Location</th>
+                    <th className="py-1.5 px-3 border-r border-slate-200">Category</th>
                     <th className="py-1.5 px-3">Work Description</th>
                   </tr>
                 </thead>
@@ -321,10 +284,13 @@ export const DailyReportView: React.FC = () => {
                       <td className="py-1.5 px-3 border-r border-slate-200 font-semibold whitespace-nowrap">
                         {r.workerName} ({r.staffId})
                       </td>
-                      <td className="py-1.5 px-3 border-r border-slate-200 whitespace-nowrap">{r.workPlaceFN}</td>
+                      <td className="py-1.5 px-3 border-r border-slate-200 whitespace-nowrap text-slate-600">
+                        {r.workCategory || 'Civil Maintenance'}
+                      </td>
                       <td className="py-1.5 px-3 text-slate-700 leading-snug">
-                        {r.workDetailsFN}
-                        {r.workDetailsAN && r.workDetailsAN !== r.workDetailsFN && ` | ${r.workDetailsAN}`}
+                        {r.workDetailsFN ? `FN: ${r.workDetailsFN}` : ''}
+                        {r.workDetailsAN && r.workDetailsAN !== r.workDetailsFN ? ` | AN: ${r.workDetailsAN}` : ''}
+                        {!r.workDetailsFN && !r.workDetailsAN && (r.remarks || 'Standard daily shift')}
                       </td>
                     </tr>
                   ))}
@@ -348,7 +314,7 @@ export const DailyReportView: React.FC = () => {
           </div>
           <div>
             <div className="h-12" />
-            <div className="border-t border-slate-400 font-bold text-slate-800 pt-1">Estate Officer / Campus Engineer</div>
+            <div className="border-t border-slate-400 font-bold text-slate-800 pt-1">Estate Officer / Executive Engineer</div>
             <div className="text-[10px] text-slate-500">Bannari Amman Institute of Technology</div>
           </div>
         </div>

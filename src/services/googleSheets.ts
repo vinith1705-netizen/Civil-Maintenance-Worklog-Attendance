@@ -236,6 +236,56 @@ export const getSavedDateString = (): string => {
 };
 
 /**
+ * Clean and separate Forenoon (FN) and Afternoon (AN) work details:
+ * Ensures FN Work column receives ONLY pure FN text (no "FN:" prefix, no "AN:" text).
+ * Ensures AN Work column receives ONLY pure AN text (no "AN:" prefix, no "FN:" text).
+ */
+export const extractFNAfternoonWork = (
+  rawFN?: string,
+  rawAN?: string,
+  combined?: string
+): { fnWork: string; anWork: string } => {
+  let fn = (rawFN || '').trim();
+  let an = (rawAN || '').trim();
+
+  // If FN contains combined pattern "FN: ... | AN: ...", extract proper halves
+  if (fn && (fn.includes('| AN:') || fn.includes('|AN:'))) {
+    const fnMatch = fn.match(/FN\s*:\s*([^|]+)/i);
+    const anMatch = fn.match(/AN\s*:\s*(.+)$/i);
+    if (fnMatch) fn = fnMatch[1].trim();
+    if (anMatch && !an) an = anMatch[1].trim();
+  }
+
+  // If AN contains combined pattern "FN: ... | AN: ...", extract proper halves
+  if (an && (an.includes('FN:') || an.includes('| AN:') || an.includes('|AN:'))) {
+    const anMatch = an.match(/AN\s*:\s*(.+)$/i);
+    const fnMatch = an.match(/FN\s*:\s*([^|]+)/i);
+    if (anMatch) an = anMatch[1].trim();
+    if (fnMatch && !fn) fn = fnMatch[1].trim();
+  }
+
+  // If FN or AN is empty, check if combined text has FN / AN notation
+  if ((!fn || !an) && combined) {
+    const text = combined.trim();
+    if (/FN\s*:/i.test(text) || /AN\s*:/i.test(text)) {
+      const fnMatch = text.match(/FN\s*:\s*([^|]+)/i);
+      const anMatch = text.match(/AN\s*:\s*(.+)$/i);
+      if (!fn && fnMatch) fn = fnMatch[1].trim();
+      if (!an && anMatch) an = anMatch[1].trim();
+    } else {
+      if (!fn) fn = text;
+      if (!an) an = text;
+    }
+  }
+
+  // Final sanitization to remove any "FN:" or "AN:" prefixes and trailing/leading pipes
+  fn = fn.replace(/^FN\s*:\s*/i, '').replace(/\|\s*AN\s*:.*$/i, '').trim();
+  an = an.replace(/^AN\s*:\s*/i, '').replace(/^.*\|\s*AN\s*:\s*/i, '').trim();
+
+  return { fnWork: fn, anWork: an };
+};
+
+/**
  * Append single attendance record matching exact schema:
  * Date | S.No | Worker Name | Category | Attendance | Locked | Saved Time
  * e.g. 2026-10-18 | 21 | Mr. KUMAR P | Carpentry | Absent | TRUE | 10/24/2026
@@ -305,13 +355,18 @@ export const appendWorklogToSheet = async (
   sNo: number = 1
 ) => {
   const cleanId = extractSpreadsheetId(spreadsheetId);
+  const { fnWork, anWork } = extractFNAfternoonWork(
+    record.workDetailsFN,
+    record.workDetailsAN,
+    record.workDetails
+  );
   const rowData = [
     record.date,
     sNo,
     formatWorkerName(record.workerName),
     formatTradeCategory(record.designation, record.workCategory),
-    record.workDetailsFN || record.workDetails || 'General civil maintenance FN',
-    record.workDetailsAN || record.workDetails || 'General civil maintenance AN',
+    fnWork,
+    anWork,
     getSavedDateString(),
   ];
 
@@ -364,13 +419,18 @@ export const upsertWorklogRowToSheet = async (
   if (!cleanId) throw new Error('Spreadsheet ID required');
 
   const targetSheetTitle = sheetName || 'Worklog';
+  const { fnWork, anWork } = extractFNAfternoonWork(
+    record.workDetailsFN,
+    record.workDetailsAN,
+    record.workDetails
+  );
   const rowData = [
     record.date,
     sNo,
     formatWorkerName(record.workerName),
     formatTradeCategory(record.designation, record.workCategory),
-    record.workDetailsFN || record.workDetails || '',
-    record.workDetailsAN || record.workDetails || '',
+    fnWork,
+    anWork,
     getSavedDateString(),
   ];
 
@@ -574,13 +634,18 @@ export const batchUpdateWorklogToSheet = async (
   const savedTime = getSavedDateString();
   const rows = records.map((r, idx) => {
     const sNo = sNoMap.get(r.staffId.toLowerCase()) || sNoMap.get(r.workerName.toLowerCase()) || idx + 1;
+    const { fnWork, anWork } = extractFNAfternoonWork(
+      r.workDetailsFN,
+      r.workDetailsAN,
+      (r as any).workDetails
+    );
     return [
       r.date,
       sNo,
       formatWorkerName(r.workerName),
       formatTradeCategory(r.designation, r.workCategory),
-      r.workDetailsFN || '',
-      r.workDetailsAN || '',
+      fnWork,
+      anWork,
       savedTime,
     ];
   });

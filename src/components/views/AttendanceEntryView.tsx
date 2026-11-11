@@ -83,8 +83,6 @@ export const AttendanceEntryView: React.FC = () => {
   // Editor form fields
   const [edFNStatus, setEdFNStatus] = useState<AttendanceStatus>('Present');
   const [edANStatus, setEdANStatus] = useState<AttendanceStatus>('Present');
-  const [edFNLocation, setEdFNLocation] = useState<string>('Ruby Hostel');
-  const [edANLocation, setEdANLocation] = useState<string>('Ruby Hostel');
   const [edFNDetails, setEdFNDetails] = useState<string>('');
   const [edANDetails, setEdANDetails] = useState<string>('');
   const [edRemarks, setEdRemarks] = useState<string>('');
@@ -128,8 +126,8 @@ export const AttendanceEntryView: React.FC = () => {
           status: primaryStatus,
           attendanceFN: existing.attendanceFN,
           attendanceAN: existing.attendanceAN,
-          workPlaceFN: existing.workPlaceFN || 'Ruby Hostel',
-          workPlaceAN: existing.workPlaceAN || 'Ruby Hostel',
+          workPlaceFN: existing.workPlaceFN || '',
+          workPlaceAN: existing.workPlaceAN || '',
           workDetailsFN: fnDetails,
           workDetailsAN: anDetails,
           calculatedWage: existing.wage,
@@ -146,8 +144,8 @@ export const AttendanceEntryView: React.FC = () => {
         status: 'Unmarked',
         attendanceFN: 'Unmarked',
         attendanceAN: 'Unmarked',
-        workPlaceFN: 'Ruby Hostel',
-        workPlaceAN: 'Ruby Hostel',
+        workPlaceFN: '',
+        workPlaceAN: '',
         workDetailsFN: '',
         workDetailsAN: '',
         calculatedWage: 0,
@@ -346,8 +344,6 @@ export const AttendanceEntryView: React.FC = () => {
     setSelectedStaffId(row.worker.staffId);
     setEdFNStatus(row.attendanceFN === 'Unmarked' ? 'Present' : (row.attendanceFN as AttendanceStatus));
     setEdANStatus(row.attendanceAN === 'Unmarked' ? 'Present' : (row.attendanceAN as AttendanceStatus));
-    setEdFNLocation(row.workPlaceFN || 'Ruby Hostel');
-    setEdANLocation(row.workPlaceAN || 'Ruby Hostel');
     setEdFNDetails(row.workDetailsFN || '');
     setEdANDetails(row.workDetailsAN || '');
     setEdRemarks(row.remarks || '');
@@ -380,8 +376,8 @@ export const AttendanceEntryView: React.FC = () => {
             status: primaryStatus,
             attendanceFN: edFNStatus,
             attendanceAN: edANStatus,
-            workPlaceFN: edFNLocation,
-            workPlaceAN: edANLocation,
+            workPlaceFN: '',
+            workPlaceAN: '',
             workDetailsFN: edFNDetails || '',
             workDetailsAN: edANDetails || '',
             calculatedWage: finalWage,
@@ -406,10 +402,10 @@ export const AttendanceEntryView: React.FC = () => {
       workerName: editingRow.worker.name,
       designation: editingRow.worker.designation,
       workCategory: editingRow.worker.category || 'Civil Maintenance',
-      workPlaceFN: edFNLocation,
+      workPlaceFN: '',
       workDetailsFN: edFNDetails || '',
       attendanceFN: edFNStatus,
-      workPlaceAN: edANLocation,
+      workPlaceAN: '',
       workDetailsAN: edANDetails || '',
       attendanceAN: edANStatus,
       calculatedWage: computedWage,
@@ -453,7 +449,7 @@ export const AttendanceEntryView: React.FC = () => {
       const improved = await improveWorkDescription(text, {
         workerName: editingRow.worker.name,
         designation: editingRow.worker.designation,
-        location: sessionType === 'FN' ? edFNLocation : edANLocation,
+        category: editingRow.worker.category || 'Civil Maintenance',
       });
 
       if (sessionType === 'FN') setEdFNDetails(improved);
@@ -524,8 +520,8 @@ export const AttendanceEntryView: React.FC = () => {
       status: 'Unmarked',
       attendanceFN: 'Unmarked',
       attendanceAN: 'Unmarked',
-      workPlaceFN: 'Ruby Hostel',
-      workPlaceAN: 'Ruby Hostel',
+      workPlaceFN: '',
+      workPlaceAN: '',
       workDetailsFN: '',
       workDetailsAN: '',
       calculatedWage: 0,
@@ -1153,21 +1149,6 @@ export const AttendanceEntryView: React.FC = () => {
                   </div>
 
                   <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Work Location – FN</label>
-                    <select
-                      value={edFNLocation}
-                      onChange={(e) => setEdFNLocation(e.target.value)}
-                      className="w-full p-2 border border-slate-300 rounded-lg bg-white"
-                    >
-                      {locations.map((loc) => (
-                        <option key={loc.id} value={loc.name}>
-                          {loc.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
                     <div className="flex items-center justify-between mb-1">
                       <label className="font-semibold text-slate-700">Work Details – FN</label>
                       <button
@@ -1217,46 +1198,30 @@ export const AttendanceEntryView: React.FC = () => {
 
                   <div>
                     <div className="flex items-center justify-between mb-1">
-                      <label className="font-semibold text-slate-700">Work Location – AN</label>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEdANLocation(edFNLocation);
-                          setEdANDetails(edFNDetails);
-                          setEdANStatus(edFNStatus);
-                          showToast('info', 'Copied FN to AN');
-                        }}
-                        className="text-[10px] text-teal-700 font-bold hover:underline flex items-center gap-0.5"
-                      >
-                        <Copy className="w-2.5 h-2.5" />
-                        <span>Copy from FN</span>
-                      </button>
-                    </div>
-                    <select
-                      value={edANLocation}
-                      onChange={(e) => setEdANLocation(e.target.value)}
-                      className="w-full p-2 border border-slate-300 rounded-lg bg-white"
-                    >
-                      {locations.map((loc) => (
-                        <option key={loc.id} value={loc.name}>
-                          {loc.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
                       <label className="font-semibold text-slate-700">Work Details – AN</label>
-                      <button
-                        type="button"
-                        onClick={() => handleImproveEditorText('AN')}
-                        disabled={isImprovingAN || !edANDetails.trim()}
-                        className="text-[10px] text-amber-700 font-bold hover:underline flex items-center gap-0.5 disabled:opacity-40"
-                      >
-                        <Sparkles className="w-3 h-3 text-amber-500" />
-                        <span>{isImprovingAN ? 'Improving...' : 'AI Polish'}</span>
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEdANDetails(edFNDetails);
+                            setEdANStatus(edFNStatus);
+                            showToast('info', 'Copied FN details to AN');
+                          }}
+                          className="text-[10px] text-teal-700 font-bold hover:underline flex items-center gap-0.5 cursor-pointer"
+                        >
+                          <Copy className="w-2.5 h-2.5" />
+                          <span>Copy from FN</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleImproveEditorText('AN')}
+                          disabled={isImprovingAN || !edANDetails.trim()}
+                          className="text-[10px] text-amber-700 font-bold hover:underline flex items-center gap-0.5 disabled:opacity-40 cursor-pointer"
+                        >
+                          <Sparkles className="w-3 h-3 text-amber-500" />
+                          <span>{isImprovingAN ? 'Improving...' : 'AI Polish'}</span>
+                        </button>
+                      </div>
                     </div>
                     <textarea
                       rows={3}

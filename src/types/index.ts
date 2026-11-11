@@ -67,6 +67,8 @@ export interface WorklogRecord {
   remarks: string;
   createdAt: string;
   syncedToSheet?: boolean;
+  workDetailsFN?: string;
+  workDetailsAN?: string;
 }
 
 export interface LocationRecord {

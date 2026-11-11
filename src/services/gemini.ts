@@ -21,7 +21,7 @@ if (apiKey) {
  */
 export const improveWorkDescription = async (
   rawDescription: string,
-  context?: { workerName?: string; designation?: string; location?: string }
+  context?: { workerName?: string; designation?: string; category?: string; location?: string }
 ): Promise<string> => {
   if (!rawDescription || rawDescription.trim().length === 0) {
     return rawDescription;
@@ -40,9 +40,8 @@ export const improveWorkDescription = async (
 The user has provided rough site notes or spoken transcription of civil maintenance work:
 "${rawDescription}"
 
-Context:
 Worker: ${context?.workerName || 'Staff'} (${context?.designation || 'Worker'})
-Location: ${context?.location || 'Campus'}
+Category: ${context?.category || 'Civil Maintenance'}
 
 INSTRUCTIONS:
 1. Correct all spelling, typographical, and grammatical mistakes.
