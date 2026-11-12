@@ -803,17 +803,21 @@ export const AttendanceEntryView: React.FC = () => {
         {filteredRows.map((row, idx) => {
           const isSelected = selectedStaffId === row.worker.staffId;
           const isPresent = row.status === 'Present';
-          const isAbsent = row.status === 'Absent';
+          const isAbsent = row.status === 'Absent' || (row.attendanceFN === 'Absent' && row.attendanceAN === 'Absent');
 
           return (
             <div
               key={`${row.worker.staffId || row.worker.id}-${idx}`}
               id={`labour-card-${row.worker.staffId}`}
               onClick={() => setSelectedStaffId(row.worker.staffId)}
-              className={`bg-white rounded-2xl p-3 sm:p-3.5 px-4 sm:px-5 shadow-xs transition duration-150 flex items-center justify-between gap-4 ${
+              className={`rounded-2xl p-3 sm:p-3.5 px-4 sm:px-5 transition duration-150 flex items-center justify-between gap-4 ${
                 isSelected
-                  ? 'border-2 border-[#16654a] shadow-sm ring-2 ring-emerald-500/10'
-                  : 'border border-slate-200/90 hover:border-emerald-300'
+                  ? isAbsent
+                    ? 'bg-rose-50 border-2 border-rose-500 shadow-sm ring-2 ring-rose-400/20'
+                    : 'bg-white border-2 border-[#16654a] shadow-sm ring-2 ring-emerald-500/10'
+                  : isAbsent
+                  ? 'bg-rose-50/80 border border-rose-300 hover:border-rose-400 shadow-xs ring-1 ring-rose-200/50'
+                  : 'bg-white border border-slate-200/90 hover:border-emerald-300 shadow-xs'
               }`}
             >
               {/* LEFT: Circular Pencil Editor Button + Number. Name + Designation + Current: Status */}
@@ -1126,8 +1130,11 @@ export const AttendanceEntryView: React.FC = () => {
                 {/* FN Box */}
                 <div className="p-3.5 rounded-xl border border-teal-200/90 bg-[#f9fdfb] space-y-3">
                   <div className="flex items-center justify-between border-b border-teal-100 pb-2">
-                    <span className="font-extrabold text-slate-800 text-xs flex items-center gap-1.5">
-                      <span>☀️</span> FORENOON (FN) SESSION
+                    <span className="font-extrabold text-slate-800 text-xs flex items-center gap-1.5 flex-wrap">
+                      <span>☀️</span> FORENOON (FN)
+                      <span className="text-[10px] font-mono font-bold text-teal-800 bg-teal-100/90 px-2 py-0.5 rounded-md border border-teal-200">
+                        8.00 AM to 12.30 PM
+                      </span>
                     </span>
                     <select
                       value={edFNStatus}
@@ -1150,7 +1157,17 @@ export const AttendanceEntryView: React.FC = () => {
 
                   <div>
                     <div className="flex items-center justify-between mb-1">
-                      <label className="font-semibold text-slate-700">Work Details – FN</label>
+                      <div className="flex items-center gap-1.5">
+                        <label className="font-semibold text-slate-700">Work Details – FN</label>
+                        <button
+                          type="button"
+                          onClick={() => setEdFNDetails((prev) => prev ? `${prev} [8.00 AM - 12.30 PM]` : '8.00 AM - 12.30 PM: ')}
+                          className="text-[9px] text-teal-700 bg-teal-50 hover:bg-teal-100 px-1.5 py-0.5 rounded border border-teal-200 font-semibold"
+                          title="Insert FN timing"
+                        >
+                          + 8.00 AM - 12.30 PM
+                        </button>
+                      </div>
                       <button
                         type="button"
                         onClick={() => handleImproveEditorText('FN')}
@@ -1165,7 +1182,7 @@ export const AttendanceEntryView: React.FC = () => {
                       rows={3}
                       value={edFNDetails}
                       onChange={(e) => setEdFNDetails(e.target.value)}
-                      placeholder=""
+                      placeholder="Enter FN tasks (8.00 AM to 12.30 PM)..."
                       className="w-full p-2 border border-slate-300 rounded-lg resize-none"
                     />
                   </div>
@@ -1174,8 +1191,11 @@ export const AttendanceEntryView: React.FC = () => {
                 {/* AN Box */}
                 <div className="p-3.5 rounded-xl border border-teal-200/90 bg-[#f9fdfb] space-y-3">
                   <div className="flex items-center justify-between border-b border-teal-100 pb-2">
-                    <span className="font-extrabold text-slate-800 text-xs flex items-center gap-1.5">
-                      <span>🌙</span> AFTERNOON (AN) SESSION
+                    <span className="font-extrabold text-slate-800 text-xs flex items-center gap-1.5 flex-wrap">
+                      <span>🌙</span> AFTERNOON (AN)
+                      <span className="text-[10px] font-mono font-bold text-teal-800 bg-teal-100/90 px-2 py-0.5 rounded-md border border-teal-200">
+                        01.30 PM to 5.30 PM
+                      </span>
                     </span>
                     <select
                       value={edANStatus}
@@ -1198,7 +1218,17 @@ export const AttendanceEntryView: React.FC = () => {
 
                   <div>
                     <div className="flex items-center justify-between mb-1">
-                      <label className="font-semibold text-slate-700">Work Details – AN</label>
+                      <div className="flex items-center gap-1.5">
+                        <label className="font-semibold text-slate-700">Work Details – AN</label>
+                        <button
+                          type="button"
+                          onClick={() => setEdANDetails((prev) => prev ? `${prev} [01.30 PM - 5.30 PM]` : '01.30 PM - 5.30 PM: ')}
+                          className="text-[9px] text-teal-700 bg-teal-50 hover:bg-teal-100 px-1.5 py-0.5 rounded border border-teal-200 font-semibold cursor-pointer"
+                          title="Insert AN timing"
+                        >
+                          + 01.30 PM - 5.30 PM
+                        </button>
+                      </div>
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
@@ -1227,7 +1257,7 @@ export const AttendanceEntryView: React.FC = () => {
                       rows={3}
                       value={edANDetails}
                       onChange={(e) => setEdANDetails(e.target.value)}
-                      placeholder=""
+                      placeholder="Enter AN tasks (01.30 PM to 5.30 PM)..."
                       className="w-full p-2 border border-slate-300 rounded-lg resize-none"
                     />
                   </div>

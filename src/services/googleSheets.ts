@@ -506,6 +506,91 @@ export const upsertWorklogRowToSheet = async (
 };
 
 /**
+ * Highlights Absent entries in Google Sheet with soft red background and bold red text:
+ * Background: #FCE8E6 (R: 0.988, G: 0.910, B: 0.902)
+ * Foreground: #C5221F (R: 0.773, G: 0.133, B: 0.122)
+ */
+export const applyAbsentHighlightToSheet = async (
+  spreadsheetId: string,
+  sheetId: number,
+  token: string,
+  absentRowIndices: number[] = []
+): Promise<void> => {
+  const cleanId = extractSpreadsheetId(spreadsheetId);
+  if (!cleanId || sheetId === undefined) return;
+
+  const requests: any[] = [];
+
+  // 1. Add Conditional Formatting Rule: any cell containing "Absent" is highlighted with soft red background & bold red text
+  requests.push({
+    addConditionalFormatRule: {
+      rule: {
+        ranges: [
+          {
+            sheetId,
+            startRowIndex: 1,
+            startColumnIndex: 0,
+            endColumnIndex: 7,
+          },
+        ],
+        booleanRule: {
+          condition: {
+            type: 'TEXT_CONTAINS',
+            values: [{ userEnteredValue: 'Absent' }],
+          },
+          format: {
+            backgroundColor: { red: 0.988, green: 0.910, blue: 0.902 },
+            textFormat: {
+              foregroundColor: { red: 0.773, green: 0.133, blue: 0.122 },
+              bold: true,
+            },
+          },
+        },
+      },
+      index: 0,
+    },
+  });
+
+  // 2. Direct repeatCell formatting for identified Absent rows so they are highlighted immediately
+  absentRowIndices.forEach((rowIdx) => {
+    requests.push({
+      repeatCell: {
+        range: {
+          sheetId,
+          startRowIndex: rowIdx,
+          endRowIndex: rowIdx + 1,
+          startColumnIndex: 0,
+          endColumnIndex: 7,
+        },
+        cell: {
+          userEnteredFormat: {
+            backgroundColor: { red: 0.988, green: 0.910, blue: 0.902 },
+            textFormat: {
+              foregroundColor: { red: 0.773, green: 0.133, blue: 0.122 },
+              bold: true,
+            },
+          },
+        },
+        fields: 'userEnteredFormat(backgroundColor,textFormat)',
+      },
+    });
+  });
+
+  try {
+    await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${cleanId}:batchUpdate`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ requests }),
+    });
+  } catch (err) {
+    console.warn('Could not apply Google Sheet absent highlight:', err);
+  }
+};
+
+/**
  * Batch update attendance records matching user exact schema:
  * Date | S.No | Worker Name | Category | Attendance | Locked | Saved Time
  * e.g. 2026-10-18 | 21 | Mr. KUMAR P | Carpentry | Absent | TRUE | 10/24/2026
@@ -526,8 +611,9 @@ export const batchUpdateAttendanceToSheet = async (
   );
 
   let targetSheetTitle = sheetName;
+  let targetSheetId = existingSheet?.sheetId;
   if (!existingSheet) {
-    await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${cleanId}:batchUpdate`, {
+    const addRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${cleanId}:batchUpdate`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -537,8 +623,13 @@ export const batchUpdateAttendanceToSheet = async (
         requests: [{ addSheet: { properties: { title: sheetName } } }],
       }),
     });
+    if (addRes.ok) {
+      const addData = await addRes.json();
+      targetSheetId = addData.replies?.[0]?.addSheet?.properties?.sheetId || 0;
+    }
   } else {
     targetSheetTitle = existingSheet.title;
+    targetSheetId = existingSheet.sheetId;
   }
 
   // S.No map
@@ -549,10 +640,16 @@ export const batchUpdateAttendanceToSheet = async (
   });
 
   const savedTime = getSavedDateString();
+  const absentRowIndices: number[] = [];
+
   const rows = records.map((r, idx) => {
     const sNo = sNoMap.get(r.staffId.toLowerCase()) || sNoMap.get(r.workerName.toLowerCase()) || idx + 1;
     const isPresent = r.attendanceFN === 'Present' || r.attendanceAN === 'Present';
     const attendanceVal = isPresent ? 'Present' : (r.attendanceFN || r.attendanceAN || 'Absent');
+
+    if (attendanceVal === 'Absent') {
+      absentRowIndices.push(idx + 1); // 0-indexed row for Google Sheets (row 0 is header)
+    }
 
     return [
       r.date,
@@ -587,6 +684,11 @@ export const batchUpdateAttendanceToSheet = async (
     await handleGoogleSheetsError(response, 'update attendance in Google Sheet');
   }
 
+  // Highlight Absent entries with red background and bold red text in Google Sheet
+  if (targetSheetId !== undefined) {
+    applyAbsentHighlightToSheet(cleanId, targetSheetId, token, absentRowIndices).catch(() => {});
+  }
+
   return { success: true, count: records.length, sheetName: targetSheetTitle };
 };
 
@@ -610,8 +712,9 @@ export const batchUpdateWorklogToSheet = async (
   );
 
   let targetSheetTitle = sheetName;
+  let targetSheetId = existingSheet?.sheetId;
   if (!existingSheet) {
-    await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${cleanId}:batchUpdate`, {
+    const addRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${cleanId}:batchUpdate`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -621,8 +724,13 @@ export const batchUpdateWorklogToSheet = async (
         requests: [{ addSheet: { properties: { title: sheetName } } }],
       }),
     });
+    if (addRes.ok) {
+      const addData = await addRes.json();
+      targetSheetId = addData.replies?.[0]?.addSheet?.properties?.sheetId || 0;
+    }
   } else {
     targetSheetTitle = existingSheet.title;
+    targetSheetId = existingSheet.sheetId;
   }
 
   const sNoMap = new Map<string, number>();
@@ -632,6 +740,8 @@ export const batchUpdateWorklogToSheet = async (
   });
 
   const savedTime = getSavedDateString();
+  const absentRowIndices: number[] = [];
+
   const rows = records.map((r, idx) => {
     const sNo = sNoMap.get(r.staffId.toLowerCase()) || sNoMap.get(r.workerName.toLowerCase()) || idx + 1;
     const { fnWork, anWork } = extractFNAfternoonWork(
@@ -639,6 +749,15 @@ export const batchUpdateWorklogToSheet = async (
       r.workDetailsAN,
       (r as any).workDetails
     );
+
+    if (
+      fnWork.toLowerCase().includes('absent') ||
+      anWork.toLowerCase().includes('absent') ||
+      (r as any).workDetails?.toLowerCase()?.includes('absent')
+    ) {
+      absentRowIndices.push(idx + 1);
+    }
+
     return [
       r.date,
       sNo,
@@ -669,6 +788,11 @@ export const batchUpdateWorklogToSheet = async (
 
   if (!response.ok) {
     await handleGoogleSheetsError(response, 'update worklog in Google Sheet');
+  }
+
+  // Highlight Absent entries with red background and bold red text in Google Sheet
+  if (targetSheetId !== undefined) {
+    applyAbsentHighlightToSheet(cleanId, targetSheetId, token, absentRowIndices).catch(() => {});
   }
 
   return { success: true, count: records.length, sheetName: targetSheetTitle };

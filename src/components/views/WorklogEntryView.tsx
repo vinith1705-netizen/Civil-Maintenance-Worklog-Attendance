@@ -1355,8 +1355,22 @@ export const WorklogEntryView: React.FC = () => {
                         <th className="py-2.5 px-2 border-r border-emerald-200 text-center whitespace-nowrap w-12">S.No</th>
                         <th className="py-2.5 px-3 border-r border-emerald-200 whitespace-nowrap min-w-[200px]">Worker Name</th>
                         <th className="py-2.5 px-3 border-r border-emerald-200 whitespace-nowrap min-w-[130px]">Category</th>
-                        <th className="py-2.5 px-3 border-r border-emerald-200 min-w-[280px]">Forenoon Work (FN)</th>
-                        <th className="py-2.5 px-3 border-r border-emerald-200 min-w-[280px]">Afternoon Work (AN)</th>
+                        <th className="py-2.5 px-3 border-r border-emerald-200 min-w-[300px]">
+                          <div className="flex items-center justify-between gap-1">
+                            <span>Forenoon Work (FN)</span>
+                            <span className="text-[9px] font-mono font-bold bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded border border-emerald-300">
+                              8.00 AM - 12.30 PM
+                            </span>
+                          </div>
+                        </th>
+                        <th className="py-2.5 px-3 border-r border-emerald-200 min-w-[300px]">
+                          <div className="flex items-center justify-between gap-1">
+                            <span>Afternoon Work (AN)</span>
+                            <span className="text-[9px] font-mono font-bold bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded border border-emerald-300">
+                              01.30 PM - 5.30 PM
+                            </span>
+                          </div>
+                        </th>
                         <th className="py-2.5 px-3 border-r border-emerald-200 whitespace-nowrap w-28">Saved Time</th>
                         <th className="py-2.5 px-2 text-center whitespace-nowrap w-24">Actions</th>
                       </tr>
@@ -1379,10 +1393,22 @@ export const WorklogEntryView: React.FC = () => {
                         const dateObj = new Date(log.date + 'T12:00:00');
                         const dayOfWeek = dateObj.toLocaleDateString('en-US', { weekday: 'short' });
 
+                        const matchAtt = attendance.find(
+                          (a) => a.date === log.date && a.staffId.toLowerCase() === log.staffId.toLowerCase()
+                        );
+                        const isRowAbsent =
+                          (currentFN && currentFN.trim().toLowerCase() === 'absent') ||
+                          (currentAN && currentAN.trim().toLowerCase() === 'absent') ||
+                          (matchAtt && matchAtt.attendanceFN === 'Absent' && matchAtt.attendanceAN === 'Absent');
+
                         return (
                           <tr
                             key={`${log.id}-${idx}`}
-                            className="hover:bg-emerald-50/30 transition group"
+                            className={`transition group ${
+                              isRowAbsent
+                                ? 'bg-rose-50/90 hover:bg-rose-100/90 border-rose-300'
+                                : 'hover:bg-emerald-50/30'
+                            }`}
                           >
                             <td className="py-2 px-3 border-r border-slate-200 font-mono text-[11px] whitespace-nowrap">
                               <div className="font-bold text-slate-800">{log.date}</div>
@@ -1392,7 +1418,14 @@ export const WorklogEntryView: React.FC = () => {
                               {sNo || idx + 1}
                             </td>
                             <td className="py-2 px-3 border-r border-slate-200">
-                              <div className="font-bold text-slate-900 leading-tight">{log.workerName}</div>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="font-bold text-slate-900 leading-tight">{log.workerName}</span>
+                                {isRowAbsent && (
+                                  <span className="px-1.5 py-0.2 rounded text-[9px] font-black uppercase tracking-wider bg-rose-200 text-rose-900 border border-rose-300">
+                                    ABSENT
+                                  </span>
+                                )}
+                              </div>
                               <div className="font-mono text-[10px] text-slate-500">{log.staffId}</div>
                             </td>
                             <td className="py-2 px-3 border-r border-slate-200 font-medium text-slate-700 whitespace-nowrap">
@@ -1406,8 +1439,12 @@ export const WorklogEntryView: React.FC = () => {
                                   type="text"
                                   value={currentFN}
                                   onChange={(e) => handleMonthlyRowChange(log, 'fnWork', e.target.value)}
-                                  placeholder="Enter FN tasks..."
-                                  className="w-full text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white"
+                                  placeholder="Enter FN tasks (8.00 AM - 12.30 PM)..."
+                                  className={`w-full text-xs px-2.5 py-1.5 rounded-lg border focus:outline-none focus:ring-1 ${
+                                    currentFN.toLowerCase() === 'absent'
+                                      ? 'border-rose-300 text-rose-900 font-bold bg-rose-50/50 focus:border-rose-500 focus:ring-rose-400'
+                                      : 'border-slate-200 focus:border-emerald-500 focus:ring-emerald-500 bg-white'
+                                  }`}
                                 />
                                 {currentFN && (
                                   <button
@@ -1428,8 +1465,12 @@ export const WorklogEntryView: React.FC = () => {
                                   type="text"
                                   value={currentAN}
                                   onChange={(e) => handleMonthlyRowChange(log, 'anWork', e.target.value)}
-                                  placeholder="Enter AN tasks..."
-                                  className="w-full text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white"
+                                  placeholder="Enter AN tasks (01.30 PM - 5.30 PM)..."
+                                  className={`w-full text-xs px-2.5 py-1.5 rounded-lg border focus:outline-none focus:ring-1 ${
+                                    currentAN.toLowerCase() === 'absent'
+                                      ? 'border-rose-300 text-rose-900 font-bold bg-rose-50/50 focus:border-rose-500 focus:ring-rose-400'
+                                      : 'border-slate-200 focus:border-emerald-500 focus:ring-emerald-500 bg-white'
+                                  }`}
                                 />
                                 {currentAN && (
                                   <button
@@ -1630,8 +1671,22 @@ export const WorklogEntryView: React.FC = () => {
                         <th className="py-2.5 px-2 border-r border-emerald-200 text-center whitespace-nowrap w-12">S.No</th>
                         <th className="py-2.5 px-3 border-r border-emerald-200 whitespace-nowrap min-w-[200px]">Worker Name</th>
                         <th className="py-2.5 px-3 border-r border-emerald-200 whitespace-nowrap min-w-[130px]">Category</th>
-                        <th className="py-2.5 px-3 border-r border-emerald-200 min-w-[280px]">Forenoon Work (FN)</th>
-                        <th className="py-2.5 px-3 border-r border-emerald-200 min-w-[280px]">Afternoon Work (AN)</th>
+                        <th className="py-2.5 px-3 border-r border-emerald-200 min-w-[300px]">
+                          <div className="flex items-center justify-between gap-1">
+                            <span>Forenoon Work (FN)</span>
+                            <span className="text-[9px] font-mono font-bold bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded border border-emerald-300">
+                              8.00 AM - 12.30 PM
+                            </span>
+                          </div>
+                        </th>
+                        <th className="py-2.5 px-3 border-r border-emerald-200 min-w-[300px]">
+                          <div className="flex items-center justify-between gap-1">
+                            <span>Afternoon Work (AN)</span>
+                            <span className="text-[9px] font-mono font-bold bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded border border-emerald-300">
+                              01.30 PM - 5.30 PM
+                            </span>
+                          </div>
+                        </th>
                         <th className="py-2.5 px-3 border-r border-emerald-200 whitespace-nowrap w-28">Saved Time</th>
                         <th className="py-2.5 px-2 text-center whitespace-nowrap w-16">Quick</th>
                       </tr>
@@ -1649,11 +1704,20 @@ export const WorklogEntryView: React.FC = () => {
                         };
                         const sNo = workers.findIndex((w) => w.staffId === worker.staffId) + 1;
                         const savedTimeStr = entry.lastSavedAt || new Date().toLocaleDateString('en-US');
+                        const attInfo = getWorkerAttendanceInfo(worker.staffId);
+                        const isRowAbsent =
+                          attInfo.isAbsent ||
+                          (entry.fnWork && entry.fnWork.trim().toLowerCase() === 'absent') ||
+                          (entry.anWork && entry.anWork.trim().toLowerCase() === 'absent');
 
                         return (
                           <tr
                             key={`${worker.staffId || worker.id}-sheet-${idx}`}
-                            className="hover:bg-emerald-50/30 transition group"
+                            className={`transition group ${
+                              isRowAbsent
+                                ? 'bg-rose-50/90 hover:bg-rose-100/90 border-rose-300'
+                                : 'hover:bg-emerald-50/30'
+                            }`}
                           >
                             <td className="py-2 px-3 border-r border-slate-200 font-mono text-[11px] text-slate-700 whitespace-nowrap">
                               {date}
@@ -1662,7 +1726,14 @@ export const WorklogEntryView: React.FC = () => {
                               {sNo}
                             </td>
                             <td className="py-2 px-3 border-r border-slate-200">
-                              <div className="font-bold text-slate-900 leading-tight">{worker.name}</div>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="font-bold text-slate-900 leading-tight">{worker.name}</span>
+                                {isRowAbsent && (
+                                  <span className="px-1.5 py-0.2 rounded text-[9px] font-black uppercase tracking-wider bg-rose-200 text-rose-900 border border-rose-300">
+                                    ABSENT
+                                  </span>
+                                )}
+                              </div>
                               <div className="font-mono text-[10px] text-slate-500">{worker.staffId}</div>
                             </td>
                             <td className="py-2 px-3 border-r border-slate-200 font-medium text-slate-700 whitespace-nowrap">
@@ -1676,8 +1747,12 @@ export const WorklogEntryView: React.FC = () => {
                                   type="text"
                                   value={entry.fnWork}
                                   onChange={(e) => handleInputChange(worker.staffId, 'fnWork', e.target.value)}
-                                  placeholder="Enter FN civil tasks..."
-                                  className="w-full text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white"
+                                  placeholder="Enter FN tasks (8.00 AM - 12.30 PM)..."
+                                  className={`w-full text-xs px-2.5 py-1.5 rounded-lg border focus:outline-none focus:ring-1 ${
+                                    isRowAbsent || entry.fnWork.toLowerCase() === 'absent'
+                                      ? 'border-rose-300 text-rose-900 font-bold bg-rose-50/50 focus:border-rose-500 focus:ring-rose-400'
+                                      : 'border-slate-200 focus:border-emerald-500 focus:ring-emerald-500 bg-white'
+                                  }`}
                                 />
                                 {entry.fnWork && (
                                   <button
@@ -1698,8 +1773,12 @@ export const WorklogEntryView: React.FC = () => {
                                   type="text"
                                   value={entry.anWork}
                                   onChange={(e) => handleInputChange(worker.staffId, 'anWork', e.target.value)}
-                                  placeholder="Enter AN civil tasks..."
-                                  className="w-full text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white"
+                                  placeholder="Enter AN tasks (01.30 PM - 5.30 PM)..."
+                                  className={`w-full text-xs px-2.5 py-1.5 rounded-lg border focus:outline-none focus:ring-1 ${
+                                    isRowAbsent || entry.anWork.toLowerCase() === 'absent'
+                                      ? 'border-rose-300 text-rose-900 font-bold bg-rose-50/50 focus:border-rose-500 focus:ring-rose-400'
+                                      : 'border-slate-200 focus:border-emerald-500 focus:ring-emerald-500 bg-white'
+                                  }`}
                                 />
                                 {entry.anWork && (
                                   <button
@@ -1877,14 +1956,20 @@ export const WorklogEntryView: React.FC = () => {
 
           const attInfo = getWorkerAttendanceInfo(worker.staffId);
           const hasLoggedWork = Boolean(entry.fnWork.trim() || entry.anWork.trim());
+          const isAbsent =
+            attInfo.isAbsent ||
+            (entry.fnWork && entry.fnWork.trim().toLowerCase() === 'absent') ||
+            (entry.anWork && entry.anWork.trim().toLowerCase() === 'absent');
 
           return (
             <div
               key={`${worker.staffId || worker.id}-${idx}`}
-              className={`bg-white rounded-2xl border-2 p-4 sm:p-5 shadow-xs transition duration-200 ${
-                hasLoggedWork
-                  ? 'border-teal-400 bg-teal-50/20'
-                  : 'border-slate-200/90 hover:border-teal-300'
+              className={`rounded-2xl border-2 p-4 sm:p-5 transition duration-200 ${
+                isAbsent
+                  ? 'border-rose-300 bg-rose-50/70 shadow-xs ring-1 ring-rose-200/50'
+                  : hasLoggedWork
+                  ? 'border-teal-400 bg-teal-50/20 shadow-xs'
+                  : 'border-slate-200/90 bg-white hover:border-teal-300 shadow-xs'
               }`}
             >
               {/* TOP HEADER: Avatar + Number + Name + Designation + Attendance Badge + Save Status */}
@@ -2003,15 +2088,18 @@ export const WorklogEntryView: React.FC = () => {
                 </div>
               </div>
 
-              {/* TWO SESSIONS INPUT ROW: FN WORK (Sun) & AN WORK (Moon) */}
+              {/* TWO SESSIONS INPUT ROW: FN WORK (8.00 AM - 12.30 PM) & AN WORK (01.30 PM - 5.30 PM) */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
                 {/* 1. FN WORK BOX */}
                 <div className="space-y-1.5">
-                  <div className="flex items-center justify-between text-xs font-bold text-slate-800">
-                    <div className="flex items-center gap-1.5">
+                  <div className="flex items-center justify-between text-xs font-bold text-slate-800 flex-wrap gap-1">
+                    <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="text-sm">☀️</span>
                       <span className="tracking-wide uppercase text-[11px] font-black text-slate-800">
                         FN WORK
+                      </span>
+                      <span className="text-[10px] font-mono font-bold text-teal-800 bg-teal-100/90 px-2 py-0.5 rounded-md border border-teal-200">
+                        8.00 AM to 12.30 PM
                       </span>
                       {entry.fnWork && (
                         <span className="text-[10px] text-teal-700 font-mono font-normal">
@@ -2020,7 +2108,22 @@ export const WorklogEntryView: React.FC = () => {
                       )}
                     </div>
 
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleInputChange(
+                            worker.staffId,
+                            'fnWork',
+                            entry.fnWork ? `${entry.fnWork} [8.00 AM - 12.30 PM]` : '8.00 AM - 12.30 PM: '
+                          )
+                        }
+                        className="text-[10px] text-teal-700 bg-teal-50 hover:bg-teal-100 font-semibold px-2 py-0.5 rounded-lg border border-teal-200 transition cursor-pointer"
+                        title="Click to insert FN timing (8.00 AM to 12.30 PM)"
+                      >
+                        + 8.00 AM - 12.30 PM
+                      </button>
+
                       <button
                         type="button"
                         onClick={() =>
@@ -2069,22 +2172,29 @@ export const WorklogEntryView: React.FC = () => {
                         if (anInput) anInput.focus();
                       }
                     }}
-                    placeholder=""
-                    className="w-full px-3.5 py-2.5 rounded-xl border-2 border-teal-200/90 focus:border-teal-600 focus:ring-2 focus:ring-teal-100 text-xs sm:text-sm text-slate-900 font-medium placeholder:text-slate-400 bg-white transition shadow-2xs"
+                    placeholder="Enter FN tasks (8.00 AM to 12.30 PM)..."
+                    className={`w-full px-3.5 py-2.5 rounded-xl border-2 text-xs sm:text-sm font-medium transition shadow-2xs ${
+                      isAbsent || entry.fnWork.toLowerCase() === 'absent'
+                        ? 'border-rose-300 bg-rose-50/50 text-rose-950 font-bold focus:border-rose-500 focus:ring-2 focus:ring-rose-200'
+                        : 'border-teal-200/90 focus:border-teal-600 focus:ring-2 focus:ring-teal-100 text-slate-900 bg-white placeholder:text-slate-400'
+                    }`}
                   />
                   <div className="flex justify-between items-center text-[10px] text-slate-400">
-                    <span>Forenoon session description</span>
+                    <span>Forenoon session (8.00 AM to 12.30 PM)</span>
                     <span className="font-mono">Press ↵ Enter for AN</span>
                   </div>
                 </div>
 
                 {/* 2. AN WORK BOX */}
                 <div className="space-y-1.5">
-                  <div className="flex items-center justify-between text-xs font-bold text-slate-800">
-                    <div className="flex items-center gap-1.5">
+                  <div className="flex items-center justify-between text-xs font-bold text-slate-800 flex-wrap gap-1">
+                    <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="text-sm">🌙</span>
                       <span className="tracking-wide uppercase text-[11px] font-black text-slate-800">
                         AN WORK
+                      </span>
+                      <span className="text-[10px] font-mono font-bold text-teal-800 bg-teal-100/90 px-2 py-0.5 rounded-md border border-teal-200">
+                        01.30 PM to 5.30 PM
                       </span>
                       {entry.anWork && (
                         <span className="text-[10px] text-teal-700 font-mono font-normal">
@@ -2093,7 +2203,22 @@ export const WorklogEntryView: React.FC = () => {
                       )}
                     </div>
 
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleInputChange(
+                            worker.staffId,
+                            'anWork',
+                            entry.anWork ? `${entry.anWork} [01.30 PM - 5.30 PM]` : '01.30 PM - 5.30 PM: '
+                          )
+                        }
+                        className="text-[10px] text-teal-700 bg-teal-50 hover:bg-teal-100 font-semibold px-2 py-0.5 rounded-lg border border-teal-200 transition cursor-pointer"
+                        title="Click to insert AN timing (01.30 PM to 5.30 PM)"
+                      >
+                        + 01.30 PM - 5.30 PM
+                      </button>
+
                       <button
                         type="button"
                         onClick={() =>
@@ -2136,8 +2261,12 @@ export const WorklogEntryView: React.FC = () => {
                         }
                       }
                     }}
-                    placeholder=""
-                    className="w-full px-3.5 py-2.5 rounded-xl border-2 border-teal-200/90 focus:border-teal-600 focus:ring-2 focus:ring-teal-100 text-xs sm:text-sm text-slate-900 font-medium placeholder:text-slate-400 bg-white transition shadow-2xs"
+                    placeholder="Enter AN tasks (01.30 PM to 5.30 PM)..."
+                    className={`w-full px-3.5 py-2.5 rounded-xl border-2 text-xs sm:text-sm font-medium transition shadow-2xs ${
+                      isAbsent || entry.anWork.toLowerCase() === 'absent'
+                        ? 'border-rose-300 bg-rose-50/50 text-rose-950 font-bold focus:border-rose-500 focus:ring-2 focus:ring-rose-200'
+                        : 'border-teal-200/90 focus:border-teal-600 focus:ring-2 focus:ring-teal-100 text-slate-900 bg-white placeholder:text-slate-400'
+                    }`}
                   />
                   <div className="flex justify-between items-center text-[10px] text-slate-400">
                     <span>Afternoon session description</span>
