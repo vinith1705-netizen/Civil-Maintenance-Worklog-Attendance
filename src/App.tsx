@@ -5,6 +5,7 @@ import { Sidebar } from './components/Sidebar';
 import { Toast } from './components/Toast';
 import { AiAssistantDrawer } from './components/AiAssistantDrawer';
 import { UnauthorizedDomainModal } from './components/UnauthorizedDomainModal';
+import { GooglePopupHelpModal } from './components/GooglePopupHelpModal';
 
 // Views
 import { DashboardView } from './components/views/DashboardView';
@@ -20,7 +21,15 @@ import { SearchFilterView } from './components/views/SearchFilterView';
 import { SettingsView } from './components/views/SettingsView';
 
 const MainLayout: React.FC = () => {
-  const { activeTab, showUnauthorizedModal, setShowUnauthorizedModal, handleGoogleLogin } = useApp();
+  const {
+    activeTab,
+    showUnauthorizedModal,
+    setShowUnauthorizedModal,
+    showPopupHelpModal,
+    setShowPopupHelpModal,
+    popupErrorDetail,
+    handleGoogleLogin,
+  } = useApp();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const renderActiveView = () => {
@@ -78,6 +87,17 @@ const MainLayout: React.FC = () => {
         onClose={() => setShowUnauthorizedModal(false)}
         onRetry={() => {
           setShowUnauthorizedModal(false);
+          handleGoogleLogin();
+        }}
+      />
+
+      {/* Google Popup Closed / Blocked Troubleshooting Modal */}
+      <GooglePopupHelpModal
+        isOpen={showPopupHelpModal}
+        errorCode={popupErrorDetail}
+        onClose={() => setShowPopupHelpModal(false)}
+        onRetryFirebase={() => {
+          setShowPopupHelpModal(false);
           handleGoogleLogin();
         }}
       />

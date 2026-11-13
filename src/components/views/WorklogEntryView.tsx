@@ -1198,7 +1198,7 @@ export const WorklogEntryView: React.FC = () => {
                     <span>Export Monthly CSV ({monthlyWorklogs.length})</span>
                   </button>
 
-                  {settings.spreadsheetId && accessToken ? (
+                  {settings.spreadsheetId && accessToken && !googleAuthExpired ? (
                     <button
                       type="button"
                       onClick={handleSyncMonthlyToGoogleSheets}
@@ -1221,7 +1221,13 @@ export const WorklogEntryView: React.FC = () => {
                       className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-emerald-950 text-xs font-black shadow-md shadow-emerald-500/30 transition cursor-pointer"
                     >
                       <FileSpreadsheet className="w-3.5 h-3.5" />
-                      <span>{isLoggingIn ? 'Connecting...' : 'Connect Google Sheet (Auto-Save)'}</span>
+                      <span>
+                        {isLoggingIn
+                          ? 'Connecting...'
+                          : googleAuthExpired
+                          ? 'Reconnect Google Sheet'
+                          : 'Connect Google Sheet (Auto-Save)'}
+                      </span>
                     </button>
                   )}
                 </div>
@@ -1575,7 +1581,7 @@ export const WorklogEntryView: React.FC = () => {
                     <span>Export CSV</span>
                   </button>
 
-                  {settings.spreadsheetId && accessToken ? (
+                  {settings.spreadsheetId && accessToken && !googleAuthExpired ? (
                     <button
                       type="button"
                       onClick={handleSyncAllToGoogleSheets}
@@ -1599,7 +1605,13 @@ export const WorklogEntryView: React.FC = () => {
                       title="Connect Google Sheet to enable full auto-save"
                     >
                       <FileSpreadsheet className="w-3.5 h-3.5" />
-                      <span>{isLoggingIn ? 'Connecting...' : 'Connect Google Sheet (Auto-Save)'}</span>
+                      <span>
+                        {isLoggingIn
+                          ? 'Connecting...'
+                          : googleAuthExpired
+                          ? 'Reconnect Google Sheet'
+                          : 'Connect Google Sheet (Auto-Save)'}
+                      </span>
                     </button>
                   )}
                 </div>

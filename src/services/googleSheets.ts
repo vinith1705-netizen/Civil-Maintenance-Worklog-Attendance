@@ -59,6 +59,8 @@ export const isGoogleAuthError = (err: any): boolean => {
     msg.includes('invalid authentication credentials') ||
     msg.includes('Expected OAuth 2 access token') ||
     msg.includes('UNAUTHENTICATED') ||
+    msg.includes('ACCESS_TOKEN_SCOPE_INSUFFICIENT') ||
+    msg.includes('insufficient authentication scopes') ||
     msg.includes('HTTP 401') ||
     err.status === 401
   );
@@ -72,25 +74,51 @@ export const handleGoogleSheetsError = async (response: Response, context: strin
     // ignore
   }
 
-  const rawMessage = errorData?.error?.message || `HTTP ${response.status}: Failed during ${context}`;
+  const rawMessage: string = errorData?.error?.message || `HTTP ${response.status}: Failed during ${context}`;
+  const errorDetailsStr = JSON.stringify(errorData?.error?.details || '');
 
-  if (
+  const isAuthOrScopeIssue =
     response.status === 401 ||
     rawMessage.includes('invalid authentication credentials') ||
     rawMessage.includes('Expected OAuth 2 access token') ||
-    rawMessage.includes('UNAUTHENTICATED')
-  ) {
+    rawMessage.includes('UNAUTHENTICATED') ||
+    rawMessage.includes('insufficient authentication scopes') ||
+    errorDetailsStr.includes('ACCESS_TOKEN_SCOPE_INSUFFICIENT');
+
+  if (isAuthOrScopeIssue) {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(
         new CustomEvent('google-oauth-expired', {
           detail: {
-            message: 'Your Google OAuth session has expired. Please reconnect your Google account to sync.',
+            message: 'Your Google OAuth session expired or is missing Google Sheets permissions. Please click "Connect Google Sheet" to reconnect.',
           },
         })
       );
     }
-    throw new GoogleAuthExpiredError(
-      'Google account session has expired. Please reconnect Google to renew your access token and sync with Google Sheets.'
+    const friendlyMsg =
+      rawMessage.includes('insufficient authentication scopes') ||
+      errorDetailsStr.includes('ACCESS_TOKEN_SCOPE_INSUFFICIENT')
+        ? 'Google account is missing Google Sheets/Drive permissions. Click "Connect Google Sheet" and approve spreadsheet permissions on the Google sign-in screen.'
+        : 'Google account session has expired or is invalid. Click "Connect Google Sheet" to sign in again and renew access.';
+    throw new GoogleAuthExpiredError(friendlyMsg);
+  }
+
+  if (response.status === 403) {
+    if (rawMessage.includes('has not been used in project') || rawMessage.includes('it is disabled')) {
+      throw new Error(
+        `Google Sheets API is disabled in the Google Cloud project. Enable sheets.googleapis.com & drive.googleapis.com in Cloud Console. (${rawMessage})`
+      );
+    }
+    if (rawMessage.toLowerCase().includes('does not have permission')) {
+      throw new Error(
+        'Your signed-in Google account does not have Edit permission for this Spreadsheet. Share the Google Sheet with your Gmail (as Editor) or create a new spreadsheet.'
+      );
+    }
+  }
+
+  if (response.status === 404) {
+    throw new Error(
+      'Google Spreadsheet not found (404). Verify the Spreadsheet URL or ID is correct and the file was not deleted.'
     );
   }
 
@@ -435,13 +463,17 @@ export const upsertWorklogRowToSheet = async (
   ];
 
   try {
-    // 1. Fetch existing dates & names to find existing row index
+    // 1. Fetch existing dates & names across all rows to find existing row index
     const checkRes = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${cleanId}/values/${encodeURIComponent(targetSheetTitle)}!A1:C100`,
+      `https://sheets.googleapis.com/v4/spreadsheets/${cleanId}/values/${encodeURIComponent(targetSheetTitle)}!A:C`,
       {
         headers: { Authorization: `Bearer ${token}` },
       }
     );
+
+    if (!checkRes.ok && (checkRes.status === 401 || checkRes.status === 403 || checkRes.status === 404)) {
+      await handleGoogleSheetsError(checkRes, 'check existing worklog rows in Google Sheet');
+    }
 
     let matchedRow = -1;
     if (checkRes.ok) {
@@ -849,7 +881,7 @@ export const createNewSpreadsheet = async (
     { range: `Workers!A2:D${workerRows.length + 1}`, values: workerRows },
   ];
 
-  await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchUpdate`, {
+  const batchRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchUpdate`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
@@ -860,6 +892,10 @@ export const createNewSpreadsheet = async (
       data: valueData,
     }),
   });
+
+  if (!batchRes.ok) {
+    await handleGoogleSheetsError(batchRes, 'populate initial tabs in new Google Spreadsheet');
+  }
 
   return { spreadsheetId, spreadsheetUrl };
 };
@@ -881,7 +917,7 @@ export const initializeMissingSheets = async (
       },
     }));
 
-    await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${cleanId}:batchUpdate`, {
+    const addRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${cleanId}:batchUpdate`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -889,6 +925,9 @@ export const initializeMissingSheets = async (
       },
       body: JSON.stringify({ requests }),
     });
+    if (!addRes.ok) {
+      await handleGoogleSheetsError(addRes, 'add missing tabs to Google Spreadsheet');
+    }
   }
 
   // Populate headers for added sheets
@@ -911,7 +950,7 @@ export const initializeMissingSheets = async (
   }
 
   if (valueData.length > 0) {
-    await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${cleanId}/values:batchUpdate`, {
+    const valRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${cleanId}/values:batchUpdate`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -922,6 +961,9 @@ export const initializeMissingSheets = async (
         data: valueData,
       }),
     });
+    if (!valRes.ok) {
+      await handleGoogleSheetsError(valRes, 'initialize tab headers in Google Spreadsheet');
+    }
   }
 };
 
